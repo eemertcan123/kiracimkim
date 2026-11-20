@@ -1,0 +1,10 @@
+{
+  "name": "Remix Kiracımkim",
+  "description": "Kiracı ve ev sahipleri için zaman damgalı teslim tutanağı, doğrulanmış aylık kira dekontu ve Kiracı Güven Karnesi platformu.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
