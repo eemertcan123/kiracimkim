@@ -122,6 +122,7 @@ export interface CandidateProfile {
   eDevletVerified: boolean;
   previousLandlordNote: string;
   approvedPaymentCount?: number;
+  handoverCount?: number;
   referenceCount?: number;
   referenceComment?: string;
   trustLoaded?: boolean;
@@ -155,6 +156,7 @@ export interface LandlordProperty {
   rentalId?: string | null;
   rentalStatus?: string | null;
   tenantSubmitted?: boolean;
+  tenantTransparencyPledged?: boolean | null;
   landlordUserId?: string | null;
 }
 

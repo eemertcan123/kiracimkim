@@ -296,6 +296,15 @@ export function LandlordHandoverScreen({
                             <span className="font-semibold text-slate-700">
                               Kiracı: {prop.tenantName}
                             </span>
+                            {prop.tenantTransparencyPledged === true ? (
+                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-800">
+                                Şeffaflık Taahhüdü Onaylandı
+                              </span>
+                            ) : prop.tenantTransparencyPledged === false ? (
+                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] font-semibold text-amber-950">
+                                Taahhüt Onaylanmadan Devam Edildi
+                              </span>
+                            ) : null}
                           </>
                         )}
                       </h2>
@@ -384,6 +393,15 @@ export function LandlordHandoverScreen({
                       {prop.nickname} ({prop.officialLocation}){' '}
                       <span className="text-slate-400 font-normal">•</span>{' '}
                       <span className="font-semibold text-slate-700">Kiracı: {prop.tenantName}</span>
+                      {prop.tenantTransparencyPledged === true ? (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-800">
+                          Şeffaflık Taahhüdü Onaylandı
+                        </span>
+                      ) : prop.tenantTransparencyPledged === false ? (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] font-semibold text-amber-950">
+                          Taahhüt Onaylanmadan Devam Edildi
+                        </span>
+                      ) : null}
                     </h2>
                     <p className="mt-1 text-xs sm:text-sm font-medium text-emerald-700">
                       Teslim Tutanağı Karşılıklı Mühürlendi
@@ -558,6 +576,11 @@ export function LandlordHandoverScreen({
                   (activeProperty.pendingInvite
                     ? `Kiracı Onayı Bekleniyor (${activeProperty.pendingInvite.maskedPhone})`
                     : 'Kiracı Daveti Bekleniyor')}
+                {activeProperty.tenantName && activeProperty.tenantTransparencyPledged === true
+                  ? ' • Şeffaflık Taahhüdü Onaylandı'
+                  : activeProperty.tenantName && activeProperty.tenantTransparencyPledged === false
+                    ? ' • Taahhüt Onaylanmadan Devam Edildi'
+                    : ''}
               </dd>
             </div>
             <div>

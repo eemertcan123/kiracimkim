@@ -11,7 +11,6 @@ import {
   Receipt,
   FileCheck2,
   Award,
-  CheckCircle2,
   Copy,
   Share2,
 } from 'lucide-react';
@@ -107,9 +106,24 @@ export function LandlordCandidateScreen({
     void loadCandidateTrust(tenantId)
       .then((trust) => {
         if (!active) return;
-        setSelectedCandidate((current) =>
-          current?.tenantId === tenantId ? { ...current, ...trust } : current
-        );
+        setSelectedCandidate((current) => {
+          if (current?.tenantId !== tenantId) return current;
+          const payments = trust.approvedPaymentCount;
+          const handovers = trust.handoverCount;
+          const refs = trust.referenceCount;
+          const first = payments === 0 && handovers === 0 && refs === 0;
+          return {
+            ...current,
+            ...trust,
+            isFirstRental: first,
+            verifiedPaymentsSummary: first
+              ? '0 Onaylı Dekont (İlk Kiralama)'
+              : `${payments} Onaylı Dekont`,
+            handoverCountText: handovers > 0 ? `${handovers} Teslim Tutanağı` : 'Henüz Yok',
+            referenceCountText: `${refs} Referans`,
+            delayDetails: '',
+          };
+        });
       })
       .catch((error: unknown) => {
         console.error(error);
@@ -462,91 +476,62 @@ export function LandlordCandidateScreen({
                   </div>
 
                   <div className="p-6 sm:p-8 space-y-6">
-                    {/* 3 Ayrı İkonlu Mini Kutu */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-slate-50/90 border border-slate-200/80 rounded-2xl p-4 flex items-start gap-3.5">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                          <Receipt className="w-5 h-5" aria-hidden="true" />
-                        </div>
-                        <div className="min-w-0">
-                          <span className="text-xs font-medium text-slate-500 block">
-                            Ödeme Kaydı
-                          </span>
-                          {selectedCandidate.transparentEntryPledged ? (
-                            <span className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold">
-                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                              <span>Şeffaf Giriş Taahhütlü Aday</span>
-                            </span>
-                          ) : (
-                            <>
-                              <span className="mt-1 text-sm font-bold font-mono-tabular text-emerald-700 block">
-                                {selectedCandidate.verifiedPaymentsSummary}
-                              </span>
-                              <span className="mt-0.5 text-[11px] text-slate-500 leading-snug block">
-                                {selectedCandidate.delayDetails}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-50/90 border border-slate-200/80 rounded-2xl p-4 flex items-start gap-3.5">
-                        <div className="w-10 h-10 rounded-xl bg-[#0B192C]/10 text-[#0B192C] flex items-center justify-center shrink-0">
-                          <FileCheck2 className="w-5 h-5" aria-hidden="true" />
-                        </div>
-                        <div className="min-w-0">
-                          <span className="text-xs font-medium text-slate-500 block">
-                            Teslim Tutanağı
-                          </span>
-                          <span className="mt-1 text-sm font-bold text-[#0B192C] block">
-                            {selectedCandidate.handoverCountText}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-50/90 border border-slate-200/80 rounded-2xl p-4 flex items-start gap-3.5">
-                        <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                          <Award className="w-5 h-5" aria-hidden="true" />
-                        </div>
-                        <div className="min-w-0">
-                          <span className="text-xs font-medium text-slate-500 block">
-                            Referans Sayısı
-                          </span>
-                          <span className="mt-1 text-sm font-bold text-[#0B192C] block">
-                            {selectedCandidate.referenceCountText}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
                     {selectedCandidate.tenantId && selectedCandidate.trustLoaded !== true ? (
                       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5">
                         <p className="text-sm text-slate-600">Kayıtlar yükleniyor.</p>
                       </div>
-                    ) : (selectedCandidate.approvedPaymentCount ?? 0) > 0 ||
-                      (selectedCandidate.referenceCount ?? 0) > 0 ? (
-                      <div className="bg-emerald-50/40 border border-emerald-200/70 rounded-2xl p-4 sm:p-5 space-y-2">
-                        <p className="text-xs font-semibold text-emerald-800">
-                          Önceki Ev Sahibi Referans Özeti
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Mevcut Sicil
                         </p>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
+                            <Receipt className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                            {(selectedCandidate.approvedPaymentCount ?? 0) > 0
+                              ? `${selectedCandidate.approvedPaymentCount} Onaylı Dekont`
+                              : '0 Onaylı Dekont (İlk Kiralama)'}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-[#0B192C]">
+                            <FileCheck2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                            {(selectedCandidate.handoverCount ?? 0) > 0
+                              ? `${selectedCandidate.handoverCount} Teslim Tutanağı`
+                              : 'Teslim Tutanağı: Henüz Yok'}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-[#0B192C]">
+                            <Award className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                            {selectedCandidate.referenceCount ?? 0} Referans
+                          </span>
+                        </div>
                         {selectedCandidate.referenceComment ? (
                           <p className="text-sm text-[#0B192C] leading-relaxed">
                             {selectedCandidate.referenceComment}
                           </p>
                         ) : null}
-                        <p className="text-sm font-semibold text-[#0B192C]">
-                          {selectedCandidate.approvedPaymentCount ?? 0} onaylı dekont
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5">
-                        <p className="text-sm text-[#0B192C] leading-relaxed">
-                          Bu adayın sistemde geçmiş kiralama kaydı bulunmuyor; ancak yeni kiralama
-                          sürecinde Teslim Tutanağı ve Banka Dekontu Doğrulaması ile şeffaf sicil
-                          oluşturmaya hazır.
-                        </p>
                       </div>
                     )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-semibold text-emerald-700">1. Davet ve Taahhüt</p>
+                        <p className="mt-1.5 text-sm text-[#0B192C] leading-relaxed">
+                          Adaya 6 haneli davet kodu gönderilir; aday daveti onaylarken şeffaflık
+                          taahhüdünü seçer.
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-semibold text-emerald-700">2. Dijital Teslim Tutanağı</p>
+                        <p className="mt-1.5 text-sm text-[#0B192C] leading-relaxed">
+                          Giriş fotoğrafları ve mülk durumu karşılıklı onaylanır.
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-semibold text-emerald-700">3. Düzenli Dekont Takibi</p>
+                        <p className="mt-1.5 text-sm text-[#0B192C] leading-relaxed">
+                          Aylık kira dekontları panelinizden doğrulanır.
+                        </p>
+                      </div>
+                    </div>
 
                     <div className="pt-2 border-t border-slate-100">
                       {tenantRental?.status === 'active' ? (
@@ -569,15 +554,13 @@ export function LandlordCandidateScreen({
                           {selectedCandidate.transparentEntryPledged ? (
                             <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
                               <p className="text-sm font-semibold text-emerald-800 leading-snug">
-                                Aday, Teslim Tutanağı ve Banka Dekontu paylaşımını kapsayan Şeffaflık
-                                Taahhüdünü onayladı
+                                Şeffaflık Taahhüdü Onaylandı
                               </p>
                             </div>
                           ) : (
                             <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
                               <p className="text-sm font-medium text-amber-950 leading-snug">
-                                Aday daveti kabul etti ancak Şeffaflık Taahhüdünü onaylamadan devam
-                                etti
+                                Taahhüt Onaylanmadan Devam Edildi
                               </p>
                             </div>
                           )}

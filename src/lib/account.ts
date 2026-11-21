@@ -495,14 +495,15 @@ export function profileToCandidate(row: ProfileRow, code = readProfileCode(row))
     code,
     maskedName: maskPersonName(name),
     maskedDistrict: 'Kayıtlı profil',
-    isFirstRental: pledged,
+    isFirstRental: true,
     transparentEntryPledged: pledged,
-    verifiedPaymentsSummary: pledged ? 'Şeffaf Giriş Taahhütlü Aday' : 'Kayıtlı kiracı profili',
-    delayDetails: pledged
-      ? 'Bu aday; eve girişte fotoğraflı teslim tutanağı tutmayı ve tüm kira ödemelerini dekontlarla düzenli belgelemeyi peşinen taahhüt etmiştir.'
-      : 'Karne kodu doğrulandı.',
-    handoverCountText: pledged ? 'İlk Kiralama (0)' : 'Canlı profil',
-    referenceCountText: pledged ? 'İlk Kiralama (0)' : 'Canlı profil',
+    verifiedPaymentsSummary: '0 Onaylı Dekont (İlk Kiralama)',
+    delayDetails: '',
+    handoverCountText: 'Henüz Yok',
+    referenceCountText: '0 Referans',
+    approvedPaymentCount: 0,
+    handoverCount: 0,
+    referenceCount: 0,
     eDevletVerified: false,
     previousLandlordNote: '',
   };
@@ -725,7 +726,7 @@ export async function loadCandidateTrust(tenantId: string) {
   const [references, payments, rentals] = await Promise.all([
     loadTenantReferences(tenantId),
     supabase.from('rent_payments').select('status').eq('tenant_id', tenantId),
-    supabase.from('rentals').select('payment_records').eq('tenant_id', tenantId),
+    supabase.from('rentals').select('payment_records, handover_report, tenant_submitted').eq('tenant_id', tenantId),
   ]);
   if (payments.error) throw payments.error;
   if (rentals.error) throw rentals.error;
@@ -736,10 +737,16 @@ export async function loadCandidateTrust(tenantId: string) {
   const approvedFromRecords = (rentals.data ?? [])
     .flatMap((row) => parsePaymentRecords((row as { payment_records?: unknown }).payment_records))
     .filter((row) => row.status === 'approved').length;
+  const handoverCount = (rentals.data ?? []).filter((row) => {
+    const record = row as { handover_report?: unknown; tenant_submitted?: boolean | null };
+    const report = asHandoverReport(record.handover_report);
+    return Boolean(report?.checklist?.sealed) || Boolean(record.tenant_submitted);
+  }).length;
   const comment = references.find((row) => row.comment?.trim())?.comment?.trim() || '';
 
   return {
     approvedPaymentCount: approvedFromPayments + approvedFromRecords,
+    handoverCount,
     referenceCount: references.length,
     referenceComment: comment,
     trustLoaded: true,
@@ -825,6 +832,7 @@ export async function loadWorkspace(userId: string) {
       }
       property.tenantName = tenantName;
       property.tenantMaskedName = maskPersonName(tenantName);
+      property.tenantTransparencyPledged = readPledge(tenant);
       property.receipts = property.receipts.map((receipt) => ({
         ...receipt,
         propertyNickname: property.nickname,
