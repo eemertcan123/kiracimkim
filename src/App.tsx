@@ -130,6 +130,8 @@ export default function App() {
   const [tenantInviteStatus, setTenantInviteStatus] = useState<'pending' | 'active'>('pending');
   const [tenantMatchDismissed, setTenantMatchDismissed] = useState(false);
   const [transparentEntryPledged, setTransparentEntryPledged] = useState(false);
+  const [pledgePromptCode, setPledgePromptCode] = useState<string | null>(null);
+  const [pledgeSaving, setPledgeSaving] = useState(false);
   const [tenantHistory, setTenantHistory] = useState<TenantHistory>({
     approvedPaymentCount: 0,
     references: [],
@@ -557,7 +559,7 @@ export default function App() {
     return inviteCode;
   };
 
-  const handleSubmitInviteCode = (rawCode: string) => {
+  const completeInviteCode = (rawCode: string) => {
     if (!session.userId) return;
     void acceptRentalByInviteCode(session.userId, rawCode)
       .then(() => applyWorkspace(session.userId, false))
@@ -569,6 +571,32 @@ export default function App() {
       .catch((error: unknown) => {
         showToast(authErrorMessage(error));
       });
+  };
+
+  const handleSubmitInviteCode = (rawCode: string) => {
+    if (!session.userId) return;
+    const noHistory =
+      tenantHistory.approvedPaymentCount === 0 && tenantHistory.references.length === 0;
+    if (noHistory) {
+      setPledgePromptCode(rawCode.trim());
+      return;
+    }
+    completeInviteCode(rawCode);
+  };
+
+  const continueInviteAfterPledge = async (acceptPledge: boolean) => {
+    if (!pledgePromptCode || pledgeSaving) return;
+    setPledgeSaving(true);
+    try {
+      if (acceptPledge) await handleSetTransparentPledge(true);
+      const code = pledgePromptCode;
+      setPledgePromptCode(null);
+      completeInviteCode(code);
+    } catch {
+      return;
+    } finally {
+      setPledgeSaving(false);
+    }
   };
 
   const handleRemindTenantInvite = (propertyId: string) => {
@@ -937,18 +965,19 @@ export default function App() {
   };
 
   const handleSetTransparentPledge = (pledged: boolean) => {
-    if (!session.userId) return;
+    if (!session.userId) return Promise.resolve();
     const previous = transparentEntryPledged;
     setTransparentEntryPledged(pledged);
-    void updatePledge(session.userId, pledged)
+    return updatePledge(session.userId, pledged)
       .then(() => {
         if (pledged) {
-          showToast('Şeffaflık taahhüdü onaylandı. Paylaşım kodunuz açıldı.');
+          showToast('Şeffaflık taahhüdü onaylandı.');
         }
       })
       .catch((error: unknown) => {
         setTransparentEntryPledged(previous);
         showToast(authErrorMessage(error));
+        throw error;
       });
   };
 
@@ -1132,8 +1161,6 @@ export default function App() {
                 : null
             }
             hasActiveRental={tenantInviteStatus === 'active'}
-            transparentEntryPledged={transparentEntryPledged}
-            onAcceptPledge={() => handleSetTransparentPledge(true)}
             onSubmitInviteCode={handleSubmitInviteCode}
             onNotify={showToast}
           />
@@ -1254,6 +1281,44 @@ export default function App() {
       />
 
       {/* Live Feedback Toast */}
+      {pledgePromptCode && (
+        <div
+          className="fixed inset-0 z-50 bg-[#0B192C]/75 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pledge-choice-title"
+        >
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-xl p-6 sm:p-8 space-y-5">
+            <h2 id="pledge-choice-title" className="text-lg sm:text-xl font-display font-bold text-[#0B192C]">
+              Şeffaflık Taahhüdü
+            </h2>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Geçmiş kiralama kaydınız bulunmuyor. Teslim tutanağına geçmeden önce, girişte fotoğraflı
+              teslim tutanağı oluşturmayı ve kira dekontlarını sistemde doğrulatmayı taahhüt
+              edebilirsiniz. Bu adım zorunlu değildir.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={pledgeSaving}
+                onClick={() => void continueInviteAfterPledge(true)}
+                className="min-h-[46px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl"
+              >
+                Şeffaflık Taahhüdünü Onayla ve Devam Et
+              </button>
+              <button
+                type="button"
+                disabled={pledgeSaving}
+                onClick={() => void continueInviteAfterPledge(false)}
+                className="min-h-[46px] px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl"
+              >
+                Taahhüt Vermeden Devam Et
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toastMessage && (
         <div
           role="status"

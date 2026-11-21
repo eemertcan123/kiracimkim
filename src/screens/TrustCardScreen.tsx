@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ShieldCheck, CheckCircle2, Copy, Share2, Lock } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, Copy, Share2 } from 'lucide-react';
 import { ensureProfileShareCode } from '../lib/account';
 import { HandoverChecklistState, UserSession } from '../types/kiracimkim';
 
@@ -18,8 +18,6 @@ interface TrustCardScreenProps {
     propertyTitle: string;
   } | null;
   hasActiveRental?: boolean;
-  transparentEntryPledged?: boolean;
-  onAcceptPledge?: () => void;
   onSubmitInviteCode?: (code: string) => void;
   onNotify: (message: string) => void;
 }
@@ -39,31 +37,20 @@ export function TrustCardScreen({
   references,
   pendingMatch = null,
   hasActiveRental = false,
-  transparentEntryPledged = false,
-  onAcceptPledge,
   onSubmitInviteCode,
   onNotify,
 }: TrustCardScreenProps) {
   const [copied, setCopied] = useState(false);
   const [whatsappCopied, setWhatsappCopied] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
-  const [profileShareCode, setProfileShareCode] = useState('');
-  const [shareCodeLoaded, setShareCodeLoaded] = useState(false);
-  const [pledgeChecked, setPledgeChecked] = useState(false);
-  const [pledgeSaving, setPledgeSaving] = useState(false);
+  const [profileShareCode, setProfileShareCode] = useState(session.carnetCode);
 
   const referenceCount = references.length;
   const hasVerifiedHistory = approvedPaymentCount > 0 || referenceCount > 0;
   const latestReference = references[0] ?? null;
   const handoverProtocolCount = checklist.sealed ? 1 : 0;
-  const activeShareCode = profileShareCode;
+  const activeShareCode = profileShareCode || session.carnetCode;
   const activeShareUrl = `kiracimkim.com/karne/${activeShareCode}`;
-  const codeLocked =
-    shareCodeLoaded &&
-    activeShareCode.startsWith('KMK-') &&
-    !hasVerifiedHistory &&
-    !transparentEntryPledged;
-  const isShareUnlocked = Boolean(activeShareCode) && !codeLocked;
   const maskedLandlordName = latestReference
     ? formatMaskedPersonName(latestReference.landlordName)
     : '';
@@ -71,33 +58,32 @@ export function TrustCardScreen({
   useEffect(() => {
     if (!session.userId) return;
     let active = true;
-    setShareCodeLoaded(false);
     void ensureProfileShareCode(session.userId)
       .then((code) => {
         if (active) setProfileShareCode(code);
       })
       .catch((error: unknown) => {
         console.error(error);
-        if (active) setProfileShareCode('');
         onNotify(error instanceof Error ? error.message : 'Paylaşım kodu oluşturulamadı.');
-      })
-      .finally(() => {
-        if (active) setShareCodeLoaded(true);
       });
     return () => {
       active = false;
     };
   }, [onNotify, session.userId]);
 
-  const submitWizardInvite = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (inviteCode.length !== 6 || !onSubmitInviteCode) return;
-    onSubmitInviteCode(inviteCode);
+  const finishInvite = (code: string) => {
+    onSubmitInviteCode?.(code);
     setInviteCode('');
   };
 
+  const submitWizardInvite = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (inviteCode.length !== 6 || !onSubmitInviteCode) return;
+    finishInvite(inviteCode);
+  };
+
   const handleCopyShareCode = async () => {
-    if (!isShareUnlocked) return;
+    if (!activeShareCode) return;
     try {
       await navigator.clipboard.writeText(activeShareCode);
     } catch {
@@ -109,7 +95,7 @@ export function TrustCardScreen({
   };
 
   const handleShareWhatsapp = () => {
-    if (!isShareUnlocked) return;
+    if (!activeShareCode) return;
     const whatsappMessage = `Merhaba, Kiracımkim Güven Karnemi inceleyebilirsiniz: https://${activeShareUrl} (Paylaşım Kodu: ${activeShareCode})`;
     window.open(
       `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`,
@@ -121,17 +107,47 @@ export function TrustCardScreen({
     setTimeout(() => setWhatsappCopied(false), 2500);
   };
 
-  const confirmPledge = () => {
-    if (!pledgeChecked || pledgeSaving) return;
-    setPledgeSaving(true);
-    onAcceptPledge?.();
-    setPledgeChecked(false);
-    setPledgeSaving(false);
-  };
+  const shareCodePanel = (
+    <div className="space-y-4 text-center">
+      <h2 className="text-lg sm:text-xl font-display font-bold text-[#0B192C]">
+        1. Adım: Kiracı Pasaportunuzu Paylaşın
+      </h2>
+      <p className="text-sm text-slate-600 leading-relaxed">
+        Ev görüşmelerinde bu kodu ev sahibine iletin; kimlik ve güven profilinizi tek tıkla görsün
+      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2 text-emerald-800">
+          <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" aria-hidden="true" />
+          <span className="font-mono-tabular text-sm sm:text-base font-bold whitespace-nowrap">
+            {activeShareCode}
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={() => void handleCopyShareCode()}
+          className="shrink-0 min-h-[40px] px-3 py-2 bg-[#0B192C] hover:bg-[#132946] text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+        >
+          <Copy className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span>{copied ? 'Kopyalandı' : 'Kopyala'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleShareWhatsapp}
+          className="shrink-0 min-h-[40px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+        >
+          <Share2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span>{whatsappCopied ? 'Hazır' : 'WhatsApp ile Gönder'}</span>
+        </button>
+      </div>
+    </div>
+  );
 
   if (!hasActiveRental && pendingMatch) {
     return (
-      <section className="max-w-xl mx-auto px-4 sm:px-6 py-8 sm:py-14">
+      <section className="max-w-xl mx-auto px-4 sm:px-6 py-8 sm:py-14 space-y-5">
+        <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-6 sm:p-8">
+          {shareCodePanel}
+        </div>
         <div className="bg-emerald-50 border border-emerald-300 rounded-3xl shadow-sm p-6 sm:p-8 space-y-5 text-center">
           <p className="text-base sm:text-lg font-display font-bold text-[#0B192C] leading-snug">
             <span className="font-sans" aria-hidden="true">
@@ -171,74 +187,7 @@ export function TrustCardScreen({
     return (
       <section className="max-w-xl mx-auto px-4 sm:px-6 py-8 sm:py-14">
         <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-6 sm:p-8 space-y-6">
-          <div className="space-y-4 text-center">
-            <h2 className="text-lg sm:text-xl font-display font-bold text-[#0B192C]">
-              1. Adım: Kiracı Pasaportunuzu Paylaşın
-            </h2>
-            <p className="text-sm text-slate-600 leading-relaxed">
-              Ev görüşmelerinde bu kodu ev sahibine iletin; kimlik ve güven profilinizi tek tıkla
-              görsün
-            </p>
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2 text-emerald-800">
-                  {codeLocked ? (
-                    <Lock className="w-4 h-4 shrink-0 text-slate-400" aria-hidden="true" />
-                  ) : (
-                    <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" aria-hidden="true" />
-                  )}
-                  <span
-                    className={`font-mono-tabular text-sm sm:text-base font-bold whitespace-nowrap ${
-                      codeLocked ? 'blur-sm select-none text-slate-400' : ''
-                    }`}
-                  >
-                    {!shareCodeLoaded || !activeShareCode ? '…' : activeShareCode}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  disabled={!isShareUnlocked}
-                  onClick={() => void handleCopyShareCode()}
-                  className="shrink-0 min-h-[40px] px-3 py-2 bg-[#0B192C] hover:bg-[#132946] disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
-                >
-                  <Copy className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                  <span>{copied ? 'Kopyalandı' : 'Kopyala'}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={!isShareUnlocked}
-                  onClick={handleShareWhatsapp}
-                  className="shrink-0 min-h-[40px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
-                >
-                  <Share2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                  <span>{whatsappCopied ? 'Hazır' : 'WhatsApp ile Gönder'}</span>
-                </button>
-              </div>
-              {codeLocked && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left space-y-3">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={pledgeChecked}
-                      onChange={(event) => setPledgeChecked(event.target.checked)}
-                      className="mt-1 h-4 w-4 shrink-0 accent-emerald-600"
-                    />
-                    <span className="text-sm text-[#0B192C] leading-relaxed">
-                      Şeffaflık Taahhüdünü Onaylıyorum
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    disabled={!pledgeChecked || pledgeSaving}
-                    onClick={confirmPledge}
-                    className="min-h-[40px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl"
-                  >
-                    Onayla
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          {shareCodePanel}
 
           <div className="flex items-center gap-3">
             <span className="h-px flex-1 bg-slate-200" />
@@ -285,7 +234,9 @@ export function TrustCardScreen({
 
   return (
     <section className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
-      {/* BLOK 3: TEK BİR SADE "GÜVEN KARNESİ" KARTI */}
+      <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-6 sm:p-8">
+        {shareCodePanel}
+      </div>
       <div className="bg-white border border-slate-200/90 rounded-3xl overflow-hidden shadow-xs">
         {/* Üstte Sadece Maskeli İsim • Kimliği Doğrulanmış Kiracı */}
         <div className="bg-[#0B192C] text-white px-6 sm:px-8 py-6 flex flex-wrap items-center justify-between gap-3">

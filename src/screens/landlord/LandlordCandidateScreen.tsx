@@ -17,9 +17,11 @@ import {
 } from 'lucide-react';
 import {
   findProfileByShareCode,
+  fetchProfile,
   loadCandidateTrust,
   loadLandlordTenantRental,
   profileToCandidate,
+  readPledge,
   type LandlordTenantRental,
 } from '../../lib/account';
 import { supabase } from '../../lib/supabase';
@@ -175,6 +177,16 @@ export function LandlordCandidateScreen({
       loadLandlordTenantRental(landlordId, tenantId)
         .then((row) => {
           if (active) setTenantRental(row);
+          return fetchProfile(tenantId);
+        })
+        .then((profile) => {
+          if (!active || !profile) return;
+          const pledged = readPledge(profile);
+          setSelectedCandidate((current) =>
+            current?.tenantId === tenantId
+              ? { ...current, transparentEntryPledged: pledged }
+              : current
+          );
         })
         .catch(() => {
           if (active) setTenantRental(null);
@@ -526,39 +538,49 @@ export function LandlordCandidateScreen({
                           {selectedCandidate.approvedPaymentCount ?? 0} onaylı dekont
                         </p>
                       </div>
-                    ) : selectedCandidate.transparentEntryPledged ? (
-                      <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4 sm:p-5">
-                        <p className="text-sm text-[#0B192C] leading-relaxed">
-                          Henüz sistemde kayıtlı geçmiş kira/dekont verisi bulunmuyor. Ancak aday,
-                          KiracımKim Şeffaflık Taahhüdü&apos;nü dijital olarak onaylamıştır.
-                        </p>
-                      </div>
                     ) : (
-                      <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 sm:p-5">
-                        <p className="text-sm font-medium text-amber-950 leading-relaxed">
-                          ⚠️ Doğrulanmamış Yeni Profil: Bu adayın sistemde kayıtlı geçmiş referansı
-                          bulunmuyor ve henüz Şeffaflık Taahhüdü&apos;nü onaylamamış. Yine de bu
-                          adaya davet göndermek istiyor musunuz?
+                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5">
+                        <p className="text-sm text-[#0B192C] leading-relaxed">
+                          Bu adayın sistemde geçmiş kiralama kaydı bulunmuyor; ancak yeni kiralama
+                          sürecinde Teslim Tutanağı ve Banka Dekontu Doğrulaması ile şeffaf sicil
+                          oluşturmaya hazır.
                         </p>
                       </div>
                     )}
 
                     <div className="pt-2 border-t border-slate-100">
                       {tenantRental?.status === 'active' ? (
-                        <div className="bg-emerald-50 border border-emerald-300 rounded-2xl px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <p className="text-sm font-semibold text-emerald-900 leading-snug">
-                            ✅ Kiracı Daveti Onayladı • Kiralama Aktif
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (tenantRental.propertyId) onOpenHandover(tenantRental.propertyId);
-                            }}
-                            disabled={!tenantRental.propertyId}
-                            className="shrink-0 min-h-[44px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl whitespace-nowrap"
-                          >
-                            Mülk &amp; Tutanak Sekmesine Git →
-                          </button>
+                        <div className="space-y-3">
+                          <div className="bg-emerald-50 border border-emerald-300 rounded-2xl px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-emerald-900 leading-snug">
+                              ✅ Kiracı Daveti Onayladı • Kiralama Aktif
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (tenantRental.propertyId) onOpenHandover(tenantRental.propertyId);
+                              }}
+                              disabled={!tenantRental.propertyId}
+                              className="shrink-0 min-h-[44px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl whitespace-nowrap"
+                            >
+                              Mülk &amp; Tutanak Sekmesine Git →
+                            </button>
+                          </div>
+                          {selectedCandidate.transparentEntryPledged ? (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+                              <p className="text-sm font-semibold text-emerald-800 leading-snug">
+                                Aday, Teslim Tutanağı ve Banka Dekontu paylaşımını kapsayan Şeffaflık
+                                Taahhüdünü onayladı
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+                              <p className="text-sm font-medium text-amber-950 leading-snug">
+                                Aday daveti kabul etti ancak Şeffaflık Taahhüdünü onaylamadan devam
+                                etti
+                              </p>
+                            </div>
+                          )}
                         </div>
                       ) : tenantRental?.status === 'pending' ? (
                         <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 sm:p-5 space-y-4">
