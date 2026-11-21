@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import {
   findProfileByShareCode,
+  loadCandidateTrust,
   loadLandlordTenantRental,
   profileToCandidate,
   type LandlordTenantRental,
@@ -96,6 +97,29 @@ export function LandlordCandidateScreen({
   useEffect(() => {
     setDirectory(lookupCandidates);
   }, [lookupCandidates]);
+
+  useEffect(() => {
+    const tenantId = selectedCandidate?.tenantId;
+    if (!tenantId || selectedCandidate.trustLoaded) return;
+    let active = true;
+    void loadCandidateTrust(tenantId)
+      .then((trust) => {
+        if (!active) return;
+        setSelectedCandidate((current) =>
+          current?.tenantId === tenantId ? { ...current, ...trust } : current
+        );
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+        if (!active) return;
+        setSelectedCandidate((current) =>
+          current?.tenantId === tenantId ? { ...current, trustLoaded: true } : current
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedCandidate?.tenantId, selectedCandidate?.trustLoaded]);
 
   const handleSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -483,35 +507,38 @@ export function LandlordCandidateScreen({
                       </div>
                     </div>
 
-                    {selectedCandidate.transparentEntryPledged ? (
-                      <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4 sm:p-5 space-y-2.5">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold">
-                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                          <span>Şeffaf Giriş Taahhütlü Aday</span>
-                        </div>
-                        <p className="text-sm text-[#0B192C] leading-relaxed">
-                          {selectedCandidate.delayDetails}
-                        </p>
+                    {selectedCandidate.tenantId && selectedCandidate.trustLoaded !== true ? (
+                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5">
+                        <p className="text-sm text-slate-600">Kayıtlar yükleniyor.</p>
                       </div>
-                    ) : (
-                      <div className="bg-emerald-50/40 border border-emerald-200/70 rounded-2xl p-4 sm:p-5">
+                    ) : (selectedCandidate.approvedPaymentCount ?? 0) > 0 ||
+                      (selectedCandidate.referenceCount ?? 0) > 0 ? (
+                      <div className="bg-emerald-50/40 border border-emerald-200/70 rounded-2xl p-4 sm:p-5 space-y-2">
                         <p className="text-xs font-semibold text-emerald-800">
                           Önceki Ev Sahibi Referans Özeti
                         </p>
-                        <p className="mt-1.5 text-sm text-[#0B192C] leading-relaxed">
-                          &ldquo;{selectedCandidate.previousLandlordNote}&rdquo;
+                        {selectedCandidate.referenceComment ? (
+                          <p className="text-sm text-[#0B192C] leading-relaxed">
+                            {selectedCandidate.referenceComment}
+                          </p>
+                        ) : null}
+                        <p className="text-sm font-semibold text-[#0B192C]">
+                          {selectedCandidate.approvedPaymentCount ?? 0} onaylı dekont
                         </p>
-                        <p className="mt-3 pt-3 border-t border-emerald-200/70 flex items-center gap-1.5 text-xs font-medium text-emerald-900">
-                          <ShieldCheck
-                            className="w-4 h-4 text-emerald-700 shrink-0"
-                            aria-hidden="true"
-                          />
-                          <span>
-                            Doğrulama Kaynağı: Tapu / DASK Doğrulanmış Ev Sahibi • Alıcı İsim-IBAN
-                            Eşleşmeli{' '}
-                            {selectedCandidate.verifiedPaymentsSummary.match(/^(\d+)/)?.[1] ?? '14'}{' '}
-                            Banka Dekontu
-                          </span>
+                      </div>
+                    ) : selectedCandidate.transparentEntryPledged ? (
+                      <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4 sm:p-5">
+                        <p className="text-sm text-[#0B192C] leading-relaxed">
+                          Henüz sistemde kayıtlı geçmiş kira/dekont verisi bulunmuyor. Ancak aday,
+                          KiracımKim Şeffaflık Taahhüdü&apos;nü dijital olarak onaylamıştır.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 sm:p-5">
+                        <p className="text-sm font-medium text-amber-950 leading-relaxed">
+                          ⚠️ Doğrulanmamış Yeni Profil: Bu adayın sistemde kayıtlı geçmiş referansı
+                          bulunmuyor ve henüz Şeffaflık Taahhüdü&apos;nü onaylamamış. Yine de bu
+                          adaya davet göndermek istiyor musunuz?
                         </p>
                       </div>
                     )}

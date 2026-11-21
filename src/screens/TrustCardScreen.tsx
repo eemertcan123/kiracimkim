@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ShieldCheck, CheckCircle2, Copy, Share2 } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, Copy, Share2, Lock } from 'lucide-react';
 import { ensureProfileShareCode } from '../lib/account';
 import { HandoverChecklistState, UserSession } from '../types/kiracimkim';
 
@@ -23,8 +23,6 @@ interface TrustCardScreenProps {
   onSubmitInviteCode?: (code: string) => void;
   onNotify: (message: string) => void;
 }
-
-type ShareAction = 'copy' | 'whatsapp';
 
 function formatMaskedPersonName(fullName: string): string {
   const parts = fullName.trim().split(/\s+/);
@@ -51,9 +49,8 @@ export function TrustCardScreen({
   const [inviteCode, setInviteCode] = useState('');
   const [profileShareCode, setProfileShareCode] = useState('');
   const [shareCodeLoaded, setShareCodeLoaded] = useState(false);
-  const [pledgeOpen, setPledgeOpen] = useState(false);
   const [pledgeChecked, setPledgeChecked] = useState(false);
-  const [pendingShare, setPendingShare] = useState<ShareAction | null>(null);
+  const [pledgeSaving, setPledgeSaving] = useState(false);
 
   const referenceCount = references.length;
   const hasVerifiedHistory = approvedPaymentCount > 0 || referenceCount > 0;
@@ -61,7 +58,12 @@ export function TrustCardScreen({
   const handoverProtocolCount = checklist.sealed ? 1 : 0;
   const activeShareCode = profileShareCode;
   const activeShareUrl = `kiracimkim.com/karne/${activeShareCode}`;
-  const isShareUnlocked = Boolean(activeShareCode);
+  const codeLocked =
+    shareCodeLoaded &&
+    activeShareCode.startsWith('KMK-') &&
+    !hasVerifiedHistory &&
+    !transparentEntryPledged;
+  const isShareUnlocked = Boolean(activeShareCode) && !codeLocked;
   const maskedLandlordName = latestReference
     ? formatMaskedPersonName(latestReference.landlordName)
     : '';
@@ -95,10 +97,7 @@ export function TrustCardScreen({
   };
 
   const handleCopyShareCode = async () => {
-    if (!activeShareCode) {
-      onNotify('Paylaşım kodu kayıt sırasında oluşur. Giriş yapın veya yeni karne oluşturun.');
-      return;
-    }
+    if (!isShareUnlocked) return;
     try {
       await navigator.clipboard.writeText(activeShareCode);
     } catch {
@@ -109,11 +108,8 @@ export function TrustCardScreen({
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const handleShareWhatsapp = async () => {
-    if (!activeShareCode) {
-      onNotify('Paylaşım kodu kayıt sırasında oluşur. Giriş yapın veya yeni karne oluşturun.');
-      return;
-    }
+  const handleShareWhatsapp = () => {
+    if (!isShareUnlocked) return;
     const whatsappMessage = `Merhaba, Kiracımkim Güven Karnemi inceleyebilirsiniz: https://${activeShareUrl} (Paylaşım Kodu: ${activeShareCode})`;
     window.open(
       `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`,
@@ -125,42 +121,12 @@ export function TrustCardScreen({
     setTimeout(() => setWhatsappCopied(false), 2500);
   };
 
-  const requiresPledge =
-    !transparentEntryPledged &&
-    referenceCount === 0 &&
-    approvedPaymentCount === 0 &&
-    handoverProtocolCount === 0;
-
-  const runShare = (action: ShareAction) => {
-    if (action === 'copy') {
-      void handleCopyShareCode();
-      return;
-    }
-    void handleShareWhatsapp();
-  };
-
-  const requestShare = (action: ShareAction) => {
-    if (!activeShareCode) {
-      onNotify('Paylaşım kodu kayıt sırasında oluşur. Giriş yapın veya yeni karne oluşturun.');
-      return;
-    }
-    if (requiresPledge) {
-      setPendingShare(action);
-      setPledgeChecked(false);
-      setPledgeOpen(true);
-      return;
-    }
-    runShare(action);
-  };
-
-  const confirmPledgeAndShare = () => {
-    if (!pledgeChecked || !pendingShare) return;
-    const action = pendingShare;
-    setPledgeOpen(false);
-    setPendingShare(null);
-    setPledgeChecked(false);
+  const confirmPledge = () => {
+    if (!pledgeChecked || pledgeSaving) return;
+    setPledgeSaving(true);
     onAcceptPledge?.();
-    runShare(action);
+    setPledgeChecked(false);
+    setPledgeSaving(false);
   };
 
   if (!hasActiveRental && pendingMatch) {
@@ -213,31 +179,64 @@ export function TrustCardScreen({
               Ev görüşmelerinde bu kodu ev sahibine iletin; kimlik ve güven profilinizi tek tıkla
               görsün
             </p>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2 text-emerald-800">
-                <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" aria-hidden="true" />
-                <span className="font-mono-tabular text-sm sm:text-base font-bold whitespace-nowrap">
-                  {!shareCodeLoaded || !activeShareCode ? '…' : activeShareCode}
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2 text-emerald-800">
+                  {codeLocked ? (
+                    <Lock className="w-4 h-4 shrink-0 text-slate-400" aria-hidden="true" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                  )}
+                  <span
+                    className={`font-mono-tabular text-sm sm:text-base font-bold whitespace-nowrap ${
+                      codeLocked ? 'blur-sm select-none text-slate-400' : ''
+                    }`}
+                  >
+                    {!shareCodeLoaded || !activeShareCode ? '…' : activeShareCode}
+                  </span>
                 </span>
-              </span>
-              <button
-                type="button"
-                disabled={!isShareUnlocked}
-                onClick={() => requestShare('copy')}
-                className="shrink-0 min-h-[40px] px-3 py-2 bg-[#0B192C] hover:bg-[#132946] disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <Copy className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                <span>{copied ? 'Kopyalandı' : 'Kopyala'}</span>
-              </button>
-              <button
-                type="button"
-                disabled={!isShareUnlocked}
-                onClick={() => requestShare('whatsapp')}
-                className="shrink-0 min-h-[40px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <Share2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                <span>{whatsappCopied ? 'Hazır' : 'WhatsApp ile Gönder'}</span>
-              </button>
+                <button
+                  type="button"
+                  disabled={!isShareUnlocked}
+                  onClick={() => void handleCopyShareCode()}
+                  className="shrink-0 min-h-[40px] px-3 py-2 bg-[#0B192C] hover:bg-[#132946] disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  <Copy className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  <span>{copied ? 'Kopyalandı' : 'Kopyala'}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!isShareUnlocked}
+                  onClick={handleShareWhatsapp}
+                  className="shrink-0 min-h-[40px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  <Share2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  <span>{whatsappCopied ? 'Hazır' : 'WhatsApp ile Gönder'}</span>
+                </button>
+              </div>
+              {codeLocked && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left space-y-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={pledgeChecked}
+                      onChange={(event) => setPledgeChecked(event.target.checked)}
+                      className="mt-1 h-4 w-4 shrink-0 accent-emerald-600"
+                    />
+                    <span className="text-sm text-[#0B192C] leading-relaxed">
+                      Şeffaflık Taahhüdünü Onaylıyorum
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!pledgeChecked || pledgeSaving}
+                    onClick={confirmPledge}
+                    className="min-h-[40px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl"
+                  >
+                    Onayla
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -280,58 +279,6 @@ export function TrustCardScreen({
             </form>
           </div>
         </div>
-        {pledgeOpen && (
-          <div
-            className="fixed inset-0 z-50 bg-[#0B192C]/75 backdrop-blur-sm flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="pledge-share-title"
-          >
-            <div className="w-full max-w-lg bg-white rounded-3xl shadow-xl p-6 sm:p-8 space-y-5">
-              <h2 id="pledge-share-title" className="text-lg sm:text-xl font-display font-bold text-[#0B192C]">
-                Şeffaf Giriş Taahhüdü ile Profilinizi Güçlendirin
-              </h2>
-              <p className="text-sm text-slate-600 leading-relaxed">
-                Henüz geçmiş kira referansınız bulunmadığından ev sahibiniz profilinizde &quot;Şeffaf
-                Giriş Taahhütlü Aday&quot; rozetini görecektir. Kodunuzu paylaşmadan önce aşağıdaki
-                taahhüdü onaylayın:
-              </p>
-              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={pledgeChecked}
-                  onChange={(event) => setPledgeChecked(event.target.checked)}
-                  className="mt-1 h-4 w-4 shrink-0 accent-emerald-600"
-                />
-                <span className="text-sm text-[#0B192C] leading-relaxed">
-                  Eve girişte fotoğraflı teslim tutanağı oluşturmayı ve aylık kira dekontlarımı
-                  sistem üzerinden düzenli belgelemeyi taahhüt ediyorum.
-                </span>
-              </label>
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPledgeOpen(false);
-                    setPendingShare(null);
-                    setPledgeChecked(false);
-                  }}
-                  className="min-h-[44px] px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl"
-                >
-                  Vazgeç
-                </button>
-                <button
-                  type="button"
-                  disabled={!pledgeChecked}
-                  onClick={confirmPledgeAndShare}
-                  className="min-h-[44px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl"
-                >
-                  Taahhüdü Onayla ve Kodu Paylaş
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </section>
     );
   }

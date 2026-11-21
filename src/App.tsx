@@ -943,7 +943,7 @@ export default function App() {
     void updatePledge(session.userId, pledged)
       .then(() => {
         if (pledged) {
-          showToast('Şeffaf Giriş Taahhüdü onaylandı ve paylaşım linkiniz oluşturuldu.');
+          showToast('Şeffaflık taahhüdü onaylandı. Paylaşım kodunuz açıldı.');
         }
       })
       .catch((error: unknown) => {

@@ -121,6 +121,10 @@ export interface CandidateProfile {
   referenceCountText: string;
   eDevletVerified: boolean;
   previousLandlordNote: string;
+  approvedPaymentCount?: number;
+  referenceCount?: number;
+  referenceComment?: string;
+  trustLoaded?: boolean;
 }
 
 export interface PendingTenantInvite {

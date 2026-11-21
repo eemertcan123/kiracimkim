@@ -10,13 +10,21 @@ import {
   loadRentPayments,
   loadTenantReferences,
   parsePaymentRecords,
+  paymentStatusLabel,
   receiptsForProperty,
   receiptsFromStoredPayments,
 } from './payments';
 import type { RentReceipt } from '../types/kiracimkim';
 import { supabase } from './supabase';
 
-const PROFILE_COLUMNS = new Set(['id', 'full_name', 'role', 'carnet_code', 'created_at']);
+const PROFILE_COLUMNS = new Set([
+  'id',
+  'full_name',
+  'role',
+  'carnet_code',
+  'created_at',
+  'transparency_pledge_accepted',
+]);
 
 export interface ProfileRow {
   id: string;
@@ -117,9 +125,13 @@ export function rememberPledgeColumn(row: ProfileRow | null | undefined) {
   if (match) pledgeColumn = match[0];
 }
 
+const PLEDGE_COLUMN = 'transparency_pledge_accepted';
+
 export function readPledge(row: ProfileRow | null | undefined): boolean {
+  if (!row) return false;
+  if (PLEDGE_COLUMN in row) return Boolean(row[PLEDGE_COLUMN]);
   rememberPledgeColumn(row);
-  if (!row || !pledgeColumn) return false;
+  if (!pledgeColumn) return false;
   return Boolean(row[pledgeColumn]);
 }
 
@@ -702,18 +714,36 @@ export async function ensureProfile(userId: string, email?: string | null) {
 }
 
 export async function updatePledge(userId: string, pledged: boolean) {
-  if (!pledgeColumn) {
-    const profile = await fetchProfile(userId);
-    rememberPledgeColumn(profile);
-  }
-  if (!pledgeColumn) {
-    throw new Error('Şeffaf Giriş Taahhüdü alanı profiller tablosunda bulunamadı.');
-  }
   const { error } = await supabase
     .from('profiles')
-    .update({ [pledgeColumn]: pledged })
+    .update({ [PLEDGE_COLUMN]: pledged })
     .eq('id', userId);
   if (error) throw error;
+}
+
+export async function loadCandidateTrust(tenantId: string) {
+  const [references, payments, rentals] = await Promise.all([
+    loadTenantReferences(tenantId),
+    supabase.from('rent_payments').select('status').eq('tenant_id', tenantId),
+    supabase.from('rentals').select('payment_records').eq('tenant_id', tenantId),
+  ]);
+  if (payments.error) throw payments.error;
+  if (rentals.error) throw rentals.error;
+
+  const approvedFromPayments = (payments.data ?? []).filter(
+    (row) => paymentStatusLabel((row as { status?: string | null }).status) === 'Onaylandı'
+  ).length;
+  const approvedFromRecords = (rentals.data ?? [])
+    .flatMap((row) => parsePaymentRecords((row as { payment_records?: unknown }).payment_records))
+    .filter((row) => row.status === 'approved').length;
+  const comment = references.find((row) => row.comment?.trim())?.comment?.trim() || '';
+
+  return {
+    approvedPaymentCount: approvedFromPayments + approvedFromRecords,
+    referenceCount: references.length,
+    referenceComment: comment,
+    trustLoaded: true,
+  };
 }
 
 export async function loadWorkspace(userId: string) {
