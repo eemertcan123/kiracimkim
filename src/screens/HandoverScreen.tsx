@@ -17,15 +17,16 @@ import {
   ImagePlus,
   Gauge,
   KeyRound,
+  Lock,
 } from 'lucide-react';
 import { ResilientImage } from '../components/ResilientImage';
 import {
-  HandoverChecklistState,
-  HandoverPhoto,
-  ROOM_DEFINITIONS,
-  RoomId,
-  ScreenId,
-} from '../types/kiracimkim';
+  LIVING_ROOMS,
+  handoverSubmitError,
+  missingMeterLabels,
+  missingRoomLabels,
+} from '../lib/handoverSteps';
+import { HandoverChecklistState, HandoverPhoto, RoomId, ScreenId } from '../types/kiracimkim';
 
 interface HandoverScreenProps {
   photos: HandoverPhoto[];
@@ -43,7 +44,26 @@ interface HandoverScreenProps {
 
 type WizardStep = 1 | 2 | 3;
 
-const LIVING_ROOMS = ROOM_DEFINITIONS.filter((r) => r.id !== 'sayaclar');
+const STEP_PARAM = 'adim';
+
+function readRequestedStep(): WizardStep {
+  const raw = new URLSearchParams(window.location.search).get(STEP_PARAM);
+  if (raw === '2') return 2;
+  if (raw === '3') return 3;
+  return 1;
+}
+
+function writeStepToUrl(nextStep: WizardStep) {
+  const url = new URL(window.location.href);
+  url.searchParams.set(STEP_PARAM, String(nextStep));
+  window.history.replaceState({}, '', url);
+}
+
+function allowedStep(photos: HandoverPhoto[], checklist: HandoverChecklistState): WizardStep {
+  if (missingRoomLabels(photos).length > 0) return 1;
+  if (missingMeterLabels(checklist).length > 0) return 2;
+  return 3;
+}
 
 export function HandoverScreen({
   photos,
@@ -58,13 +78,16 @@ export function HandoverScreen({
   onNavigate,
   onNotify,
 }: HandoverScreenProps) {
-  const [step, setStep] = useState<WizardStep>(1);
+  const [step, setStep] = useState<WizardStep>(() =>
+    Math.min(readRequestedStep(), allowedStep(photos, checklist)) as WizardStep
+  );
+  const [meterHint, setMeterHint] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<RoomId>('salon');
+  const [openRoomId, setOpenRoomId] = useState<RoomId | null>(null);
   const [condition, setCondition] = useState<'hasarsiz' | 'kusurlu'>('hasarsiz');
   const [noteInput, setNoteInput] = useState('');
   const [defectCloseUpUrl, setDefectCloseUpUrl] = useState<string>('');
   const [defectError, setDefectError] = useState<string>('');
-  const [showAllRooms, setShowAllRooms] = useState(false);
 
   // Live Camera Modal State
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -72,6 +95,7 @@ export function HandoverScreen({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const replacePhotoIdRef = useRef<string | null>(null);
   const defectFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const electricPhotoRef = useRef<HTMLInputElement | null>(null);
@@ -80,14 +104,90 @@ export function HandoverScreen({
 
   const activeRoomDef =
     LIVING_ROOMS.find((r) => r.id === selectedRoom) ?? LIVING_ROOMS[0];
-  const displayedPhotos = showAllRooms
-    ? photos
-    : photos.filter((p) => p.roomId === selectedRoom);
+  const displayedPhotos = photos.filter((p) => p.roomId === selectedRoom);
 
-  const goToStep = (nextStep: WizardStep) => {
-    setStep(nextStep);
+  const openRoom = (roomId: RoomId) => {
+    setSelectedRoom(roomId);
+    setOpenRoomId(roomId);
+    setCondition('hasarsiz');
+    setNoteInput('');
+    setDefectCloseUpUrl('');
+    setDefectError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const closeRoom = () => {
+    setOpenRoomId(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const missingRooms = missingRoomLabels(photos);
+  const missingMeters = missingMeterLabels(checklist);
+
+  const stepBlockReason = (nextStep: WizardStep): string | null => {
+    if (nextStep <= 1) return null;
+    if (missingRooms.length > 0) {
+      return `Önce oda fotoğraflarını tamamlamanız gerekiyor: ${missingRooms.join(', ')}.`;
+    }
+    if (nextStep >= 3 && missingMeters.length > 0) {
+      return `Sayaç ve anahtar bilgilerini tamamlayın: ${missingMeters.join(', ')}.`;
+    }
+    return null;
+  };
+
+  const goToStep = (nextStep: WizardStep) => {
+    const reason = stepBlockReason(nextStep);
+    if (reason) {
+      if (nextStep >= 3) setMeterHint(true);
+      onNotify(reason);
+      return;
+    }
+    setStep(nextStep);
+    writeStepToUrl(nextStep);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    const requested = readRequestedStep();
+    if (requested === step) {
+      writeStepToUrl(step);
+      return;
+    }
+    const reason = stepBlockReason(requested);
+    if (reason) {
+      writeStepToUrl(step);
+      onNotify(reason);
+      return;
+    }
+    setStep(requested);
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => {
+      const requested = readRequestedStep();
+      const reason = stepBlockReason(requested);
+      if (reason) {
+        writeStepToUrl(step);
+        onNotify(reason);
+        return;
+      }
+      setStep(requested);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  });
+
+  useEffect(() => {
+    const furthest = allowedStep(photos, checklist);
+    if (step > furthest) {
+      setStep(furthest);
+      writeStepToUrl(furthest);
+      onNotify(
+        handoverSubmitError(photos, checklist) ??
+          'Önce oda fotoğraflarını tamamlamanız gerekiyor.'
+      );
+    }
+  }, [checklist, photos, step]);
 
   const stopCameraStream = () => {
     if (streamRef.current) {
@@ -213,6 +313,8 @@ export function HandoverScreen({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    const replacingId = replacePhotoIdRef.current;
+    replacePhotoIdRef.current = null;
     if (!file) return;
     if (!validateDefectRequirement()) {
       e.target.value = '';
@@ -238,6 +340,7 @@ export function HandoverScreen({
         hash: createRandomHash(),
       };
       onAddPhoto(newPhoto);
+      if (replacingId) onDeletePhoto(replacingId);
       resetCaptureInputs();
       onNotify(`${activeRoomDef.label} fotoğrafı başarıyla yüklendi.`);
     };
@@ -304,8 +407,11 @@ export function HandoverScreen({
     }
   };
 
-  const completedRoomsCount = LIVING_ROOMS.filter((room) =>
-    photos.some((p) => p.roomId === room.id)
+  const roomPhotoCount = (roomId: RoomId) => photos.filter((p) => p.roomId === roomId).length;
+  const roomIsComplete = (roomId: RoomId, requiredCount: number) =>
+    roomPhotoCount(roomId) >= requiredCount;
+  const finishedRoomCount = LIVING_ROOMS.filter((room) =>
+    roomIsComplete(room.id, room.requiredCount)
   ).length;
   const defectCount = photos.filter((p) => p.condition === 'kusurlu').length;
   const meterPhotosCount = [
@@ -338,10 +444,12 @@ export function HandoverScreen({
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5">
           {wizardSteps.map((ws, index) => {
             const isCurrent = step === ws.id;
+            const isLocked = stepBlockReason(ws.id) !== null;
             const isDone =
-              (ws.id === 1 && step > 1) ||
-              (ws.id === 2 && step > 2) ||
-              (ws.id === 3 && checklist.sealed);
+              !isCurrent &&
+              ((ws.id === 1 && missingRooms.length === 0) ||
+                (ws.id === 2 && missingRooms.length === 0 && missingMeters.length === 0) ||
+                (ws.id === 3 && checklist.sealed));
 
             return (
               <div key={ws.id} className="flex items-center gap-2 flex-1 min-w-0">
@@ -349,14 +457,20 @@ export function HandoverScreen({
                   type="button"
                   onClick={() => goToStep(ws.id)}
                   aria-current={isCurrent ? 'step' : undefined}
+                  aria-disabled={isLocked}
                   className={`w-full min-h-[46px] px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center gap-2 text-center ${
                     isCurrent
                       ? 'bg-[#0B192C] border-[#0B192C] text-white'
                       : isDone
                       ? 'bg-emerald-50 border-emerald-600 text-emerald-800 hover:bg-emerald-100/70'
+                      : isLocked
+                      ? 'bg-slate-50 border-slate-200 text-slate-400'
                       : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                   }`}
                 >
+                  {isLocked && (
+                    <Lock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  )}
                   {isDone && !isCurrent && (
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
                   )}
@@ -375,69 +489,101 @@ export function HandoverScreen({
       </nav>
 
       {/* ADIM 1: ODA FOTOĞRAFLARI */}
-      {step === 1 && (
-        <div className="mt-6 space-y-6">
-          {/* Room Selector Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+      {step === 1 && !openRoomId && (
+        <div className="mt-6 space-y-5">
+          <div>
+            <h2 className="text-lg sm:text-xl font-display font-bold text-[#0B192C]">
+              Odaları fotoğraflayın
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 leading-relaxed">
+              Bir oda seçin, fotoğraflarını ekleyin ve tamamlayın. Sıradaki odayı siz seçersiniz.
+            </p>
+            <p className="mt-2 text-xs font-semibold text-slate-500">
+              {finishedRoomCount}/{LIVING_ROOMS.length} oda tamamlandı
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {LIVING_ROOMS.map((room) => {
-              const roomCount = photos.filter((p) => p.roomId === room.id).length;
-              const isSelected = !showAllRooms && selectedRoom === room.id;
+              const count = roomPhotoCount(room.id);
+              const done = roomIsComplete(room.id, room.requiredCount);
               return (
                 <button
                   key={room.id}
                   type="button"
-                  onClick={() => {
-                    setShowAllRooms(false);
-                    setSelectedRoom(room.id);
-                  }}
-                  className={`min-h-[44px] px-4 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap shrink-0 inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${
-                    isSelected
-                      ? 'bg-[#0B192C] text-white'
-                      : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-300'
-                  }`}
+                  onClick={() => openRoom(room.id)}
+                  className="text-left bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 hover:border-slate-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
                 >
-                  <span>{room.label}</span>
-                  <span
-                    className={`text-xs font-mono-tabular ${
-                      isSelected
-                        ? 'text-emerald-300'
-                        : roomCount > 0
-                        ? 'text-emerald-700 font-semibold'
-                        : 'text-slate-400'
-                    }`}
-                  >
-                    {roomCount}/{room.requiredCount}
-                  </span>
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-base font-display font-bold text-[#0B192C]">{room.label}</h3>
+                    <span
+                      className={`shrink-0 inline-flex items-center gap-1 text-xs font-semibold ${
+                        done ? 'text-emerald-700' : 'text-slate-500'
+                      }`}
+                    >
+                      {done && <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />}
+                      {done ? 'Tamamlandı' : 'Fotoğraf bekleniyor'}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600 font-mono-tabular">
+                    {count}/{room.requiredCount} fotoğraf
+                  </p>
                 </button>
               );
             })}
-
-            <button
-              type="button"
-              onClick={() => setShowAllRooms((prev) => !prev)}
-              className={`min-h-[44px] px-4 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${
-                showAllRooms
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              Tüm Fotoğraflar ({photos.length})
-            </button>
           </div>
 
-          {/* Capture Control Card */}
+          {missingRooms.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+              <p>Eksik odalar: {missingRooms.join(', ')}. Karttan açıp fotoğrafları tamamlayın.</p>
+            </div>
+          )}
+
+          <div className="pt-1 flex justify-end">
+            <button
+              type="button"
+              onClick={() => goToStep(2)}
+              className="w-full sm:w-auto min-h-[48px] px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition-colors inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-600"
+            >
+              <span>Sayaçlar ve Anahtar Adımına Geç</span>
+              <ArrowRight className="w-4 h-4 shrink-0" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 1 && openRoomId && (
+        <div className="mt-6 space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={closeRoom}
+              className="min-h-[40px] inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-[#0B192C]"
+            >
+              <ArrowLeft className="w-4 h-4 shrink-0" aria-hidden="true" />
+              Oda listesi
+            </button>
+            <span className="text-xs font-mono-tabular text-slate-500">
+              {roomPhotoCount(activeRoomDef.id)}/{activeRoomDef.requiredCount} fotoğraf
+            </span>
+          </div>
+
           <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6">
             <div>
               <h2 className="text-lg font-display font-bold text-[#0B192C]">
-                {activeRoomDef.label} Fotoğrafı Ekle
+                {activeRoomDef.label} Fotoğrafları
               </h2>
-              <p className="mt-1 text-sm text-slate-600">{activeRoomDef.guidance}</p>
+              <p className="mt-1 text-sm text-slate-600 leading-relaxed">
+                {activeRoomDef.id === 'salon'
+                  ? 'Zemin, duvarlar, pencereler ve odanın genel görünümünü fotoğraflayın. Böylece evin mevcut durumunu kayıt altına alabilirsiniz.'
+                  : activeRoomDef.guidance}
+              </p>
             </div>
 
             {/* Condition Toggle */}
             <div className="mt-5">
               <span className="block text-xs font-medium text-slate-500 mb-2">
-                Bölüm Durumu
+                Bölüm durumu
               </span>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
@@ -465,7 +611,7 @@ export function HandoverScreen({
                   }`}
                 >
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
-                  <span>Mevcut Kusur İşaretle</span>
+                  <span>Mevcut kusur işaretle</span>
                 </button>
               </div>
             </div>
@@ -603,6 +749,7 @@ export function HandoverScreen({
                 type="button"
                 onClick={() => {
                   if (!validateDefectRequirement()) return;
+                  replacePhotoIdRef.current = null;
                   fileInputRef.current?.click();
                 }}
                 className="min-h-[48px] px-4 py-3 bg-white border border-slate-300 hover:bg-slate-50 text-[#0B192C] font-semibold text-sm rounded-xl transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
@@ -640,13 +787,8 @@ export function HandoverScreen({
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-display font-bold text-[#0B192C]">
-                {showAllRooms
-                  ? `Tüm Tespit Fotoğrafları (${displayedPhotos.length})`
-                  : `${activeRoomDef.label} Fotoğrafları (${displayedPhotos.length})`}
+                Eklenen fotoğraflar ({displayedPhotos.length})
               </h3>
-              <span className="text-xs font-mono-tabular text-slate-500">
-                {completedRoomsCount}/{LIVING_ROOMS.length} Oda Kayıtlı
-              </span>
             </div>
 
             {displayedPhotos.length === 0 ? (
@@ -741,15 +883,27 @@ export function HandoverScreen({
                           />
                           {photo.location}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => onDeletePhoto(photo.id)}
-                          aria-label={`${photo.roomLabel} fotoğrafını sil`}
-                          className="min-h-[36px] px-2 inline-flex items-center gap-1 text-slate-500 hover:text-rose-700 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                          <span>Sil</span>
-                        </button>
+                        <span className="inline-flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              replacePhotoIdRef.current = photo.id;
+                              fileInputRef.current?.click();
+                            }}
+                            className="min-h-[36px] px-2 inline-flex items-center gap-1 text-slate-600 hover:text-[#0B192C] transition-colors"
+                          >
+                            <span>Değiştir</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDeletePhoto(photo.id)}
+                            aria-label={`${photo.roomLabel} fotoğrafını sil`}
+                            className="min-h-[36px] px-2 inline-flex items-center gap-1 text-slate-500 hover:text-rose-700 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                            <span>Sil</span>
+                          </button>
+                        </span>
                       </div>
                     </div>
                   </article>
@@ -758,15 +912,13 @@ export function HandoverScreen({
             )}
           </div>
 
-          {/* Step 1 Footer CTA */}
-          <div className="pt-2 flex justify-end">
+          <div className="pt-1 flex justify-end">
             <button
               type="button"
-              onClick={() => goToStep(2)}
-              className="w-full sm:w-auto min-h-[48px] px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition-colors inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-600"
+              onClick={closeRoom}
+              className="w-full sm:w-auto min-h-[48px] px-6 py-3 bg-[#0B192C] hover:bg-[#132946] text-white font-semibold text-sm rounded-xl transition-colors"
             >
-              <span>Sonraki Adım: Sayaç &amp; Anahtar</span>
-              <ArrowRight className="w-4 h-4 shrink-0" aria-hidden="true" />
+              Odayı tamamla
             </button>
           </div>
         </div>
@@ -973,14 +1125,24 @@ export function HandoverScreen({
               <span>Geri</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => goToStep(3)}
-              className="min-h-[48px] px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition-colors inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-600"
-            >
-              <span>Sonraki Adım: Özet ve Karşılıklı Onay</span>
-              <ArrowRight className="w-4 h-4 shrink-0" aria-hidden="true" />
-            </button>
+            <div className="flex flex-col items-stretch sm:items-end gap-2">
+              {meterHint && missingMeters.length > 0 && (
+                <p className="text-sm text-slate-600 sm:text-right">
+                  Eksik alanlar: {missingMeters.join(', ')}.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setMeterHint(true);
+                  goToStep(3);
+                }}
+                className="min-h-[48px] px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition-colors inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-600"
+              >
+                <span>Sonraki Adım: Özet ve Karşılıklı Onay</span>
+                <ArrowRight className="w-4 h-4 shrink-0" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </div>
       )}

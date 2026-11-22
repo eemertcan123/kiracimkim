@@ -35,6 +35,7 @@ import {
   type PendingMatch,
   type TenantHistory,
 } from './lib/account';
+import { handoverSubmitError } from './lib/handoverSteps';
 import { setRentalPaymentStatus, submitRentPayment } from './lib/payments';
 import { supabase } from './lib/supabase';
 import {
@@ -740,6 +741,11 @@ export default function App() {
   };
 
   const handleSealProtocol = () => {
+    const incomplete = handoverSubmitError(tenantProperty.photos, tenantProperty.checklist);
+    if (incomplete) {
+      showToast(incomplete);
+      return;
+    }
     if (!tenantProperty.rentalId || tenantProperty.id === 'unset') {
       const message = 'Teslim tutanağı gönderilemedi. Aktif kiralama kaydı bulunamadı.';
       console.error(message);
@@ -766,7 +772,7 @@ export default function App() {
     };
     setTenantProperties((prev) => prev.map(seal));
     setOwnedProperties((prev) => prev.map(seal));
-    void submitTenantHandover(rentalId)
+    void submitTenantHandover(rentalId, handoverReportFromProperty(tenantProperty))
       .then(() => {
         showToast('Teslim tutanağı zaman damgasıyla mühürlendi ve Ev Sahibi onayına sunuldu.');
       })

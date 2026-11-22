@@ -15,6 +15,7 @@ import {
   receiptsFromStoredPayments,
 } from './payments';
 import type { RentReceipt } from '../types/kiracimkim';
+import { handoverSubmitError } from './handoverSteps';
 import { supabase } from './supabase';
 
 const PROFILE_COLUMNS = new Set([
@@ -270,7 +271,14 @@ export async function saveRentalHandoverReport(rentalId: string, report: Handove
   throw error;
 }
 
-export async function submitTenantHandover(rentalId: string) {
+export async function submitTenantHandover(rentalId: string, report?: HandoverReport | null) {
+  const stored = report ?? readCachedHandoverReport(rentalId);
+  const problem = stored
+    ? handoverSubmitError(stored.photos, stored.checklist)
+    : 'Teslim tutanağı gönderilemedi. Kayıt bulunamadı.';
+  if (problem) {
+    throw new Error(problem);
+  }
   const { data, error } = await supabase
     .from('rentals')
     .update({ tenant_submitted: true })

@@ -13,6 +13,7 @@ import {
   Award,
   Copy,
   Share2,
+  Clock,
 } from 'lucide-react';
 import {
   findProfileByShareCode,
@@ -581,14 +582,25 @@ export function LandlordCandidateScreen({
                           )}
                         </div>
                       ) : tenantRental?.status === 'pending' ? (
-                        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 sm:p-5 space-y-4">
-                          <p className="text-sm font-semibold text-[#0B192C] leading-snug">
-                            Davet gönderildi. Kiracı bu kodu girmeden kiralama başlamaz.
+                        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/50 p-4 sm:p-5 space-y-4">
+                          <div className="flex items-start gap-3">
+                            <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-amber-700 border border-amber-200">
+                              <Clock className="w-4 h-4" aria-hidden="true" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm sm:text-base font-display font-bold text-[#0B192C] leading-snug">
+                                Kiracının onayı bekleniyor
+                              </p>
+                              <p className="mt-1 text-sm text-slate-600 leading-relaxed">
+                                Bu 6 haneli kodu kiracınızla paylaşın. Kiracınız kodu KiracımKim
+                                hesabına girerek daveti onayladığında kiralama süreci başlayacak.
+                              </p>
+                            </div>
+                          </div>
+                          <p className="rounded-xl border border-amber-200/70 bg-white px-3 py-3 text-center text-2xl font-bold tracking-[0.28em] text-[#0B192C] font-mono-tabular">
+                            {tenantRental.inviteCode || '—'}
                           </p>
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="min-w-0 text-2xl font-bold tracking-widest text-[#0B192C] font-mono-tabular whitespace-nowrap">
-                              {tenantRental.inviteCode || '—'}
-                            </p>
+                          <div className="flex flex-col sm:flex-row gap-2">
                             <button
                               type="button"
                               disabled={!tenantRental.inviteCode}
@@ -600,7 +612,7 @@ export function LandlordCandidateScreen({
                                 onNotify(`Davet kodu kopyalandı: ${code}`);
                                 window.setTimeout(() => setInviteCodeCopied(false), 2500);
                               }}
-                              className="shrink-0 min-h-[40px] px-3 py-2 bg-[#0B192C] hover:bg-[#132946] disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+                              className="flex-1 min-h-[44px] px-3 py-2 bg-[#0B192C] hover:bg-[#132946] disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5"
                             >
                               <Copy className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                               <span>{inviteCodeCopied ? 'Kopyalandı' : 'Kodu Kopyala'}</span>
@@ -618,7 +630,7 @@ export function LandlordCandidateScreen({
                                   'noopener,noreferrer'
                                 );
                               }}
-                              className="shrink-0 min-h-[40px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+                              className="flex-1 min-h-[44px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5"
                             >
                               <Share2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                               <span>WhatsApp ile Gönder</span>
