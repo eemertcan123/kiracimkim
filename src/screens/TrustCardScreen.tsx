@@ -15,18 +15,18 @@ import { HandoverChecklistState, UserSession } from '../types/kiracimkim';
 const PASSPORT_BENEFITS: Array<{ icon: LucideIcon; title: string; body: string }> = [
   {
     icon: Camera,
-    title: 'Depozito Güvencesi (Teslim Tutanağı)',
-    body: 'Eve girerken çektiğiniz oda fotoğrafları ve demirbaş durumu karşılıklı onaylanarak kayıt altına alınır; çıkarken haksız depozito kesintisi yaşamazsınız.',
+    title: 'Depozito Güvencesi',
+    body: 'Eve giriş ve çıkış durumunu dijital teslim tutanağıyla kayıt altına alın.',
   },
   {
     icon: Landmark,
-    title: 'Resmi Kira Sicili (Banka Dekontları)',
-    body: "Her ay yüklediğiniz banka dekontları doğrulanarak bir sonraki ev görüşmenizde size güçlü bir 'Güvenilir Kiracı' referansı oluşturur.",
+    title: 'Doğrulanmış Ödeme Geçmişi',
+    body: 'Onaylanan kira ödemelerinizi sonraki kiralamalarda kanıtlayın.',
   },
   {
     icon: KeyRound,
-    title: 'Tek Kodla Hızlı Onay',
-    body: 'Ev sahiplerine tek tek belge veya kefil anlatmak yerine sadece KMK- kodunuzu paylaşarak güven profilinizi tek tıkla sunarsınız.',
+    title: 'Tek Kodla Güven',
+    body: 'Güven profilinizi ev sahipleriyle kolayca paylaşın.',
   },
 ];
 
@@ -41,7 +41,7 @@ function PassportBenefits() {
     <aside className="min-w-0 h-full">
       <div className="h-full bg-white border border-slate-200/90 rounded-3xl shadow-sm p-6 sm:p-7 flex flex-col">
         <h2 className="text-lg sm:text-xl font-display font-bold text-[#0B192C] leading-snug">
-          Kiracı Pasaportu Size Ne Kazandırır?
+          Kiracı Pasaportu Neden Önemli?
         </h2>
         <div className="mt-5 space-y-3 flex-1">
           {PASSPORT_BENEFITS.map((benefit) => {
@@ -66,20 +66,16 @@ function PassportBenefits() {
             );
           })}
         </div>
-        <p className="mt-5 rounded-2xl bg-[#0B192C] px-4 py-3.5 text-center text-xs sm:text-[13px] font-semibold leading-6 text-white">
-          <span className="whitespace-nowrap">1. {PASSPORT_STEPS[0]}</span>
-          <span className="whitespace-nowrap">
-            <span className="mx-1.5 text-emerald-300" aria-hidden="true">
-              →
-            </span>
-            2. {PASSPORT_STEPS[1]}
-          </span>
-          <span className="whitespace-nowrap">
-            <span className="mx-1.5 text-emerald-300" aria-hidden="true">
-              →
-            </span>
-            3. {PASSPORT_STEPS[2]}
-          </span>
+        <p className="mt-5 rounded-2xl bg-[#0B192C] px-3.5 py-3 text-center text-xs font-semibold leading-5 text-white break-words">
+          1. {PASSPORT_STEPS[0]}{' '}
+          <span className="text-emerald-300" aria-hidden="true">
+            →
+          </span>{' '}
+          2. {PASSPORT_STEPS[1]}{' '}
+          <span className="text-emerald-300" aria-hidden="true">
+            →
+          </span>{' '}
+          3. {PASSPORT_STEPS[2]}
         </p>
       </div>
     </aside>
@@ -222,7 +218,7 @@ export function TrustCardScreen({
           className="shrink-0 min-h-[40px] px-3 py-2 bg-[#0B192C] hover:bg-[#132946] text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
         >
           <Copy className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-          <span>{copied ? 'Kopyalandı' : 'Kopyala'}</span>
+          <span>{copied ? 'Kopyalandı' : 'Kodu Kopyala'}</span>
         </button>
         <button
           type="button"
@@ -281,27 +277,50 @@ export function TrustCardScreen({
     return (
       <TrustPassportLayout>
         <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-6 sm:p-8 h-full flex flex-col">
-          {shareCodePanel}
-
-          <div className="mt-6 flex items-center gap-3">
-            <span className="h-px flex-1 bg-slate-200" />
-            <p className="text-xs text-slate-500 text-center">
-              ↓ Ev sahibiniz sizi aday olarak seçtiğinde
+          <div className="space-y-4 text-center">
+            <h2 className="text-lg sm:text-xl font-display font-bold text-[#0B192C]">
+              Ev sahibine Kiracı Pasaportunuzu gönderin
+            </h2>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Ev görüşmesinde veya mevcut ev sahibinize bu kodu iletin.
             </p>
-            <span className="h-px flex-1 bg-slate-200" />
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2.5 text-emerald-800">
+                <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                <span className="font-mono-tabular text-sm sm:text-base font-bold whitespace-nowrap">
+                  {activeShareCode}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void handleCopyShareCode()}
+                className="shrink-0 min-h-[44px] px-3.5 py-2 bg-[#0B192C] hover:bg-[#132946] text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <Copy className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                <span>{copied ? 'Kopyalandı' : 'Kodu Kopyala'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleShareWhatsapp}
+                className="shrink-0 min-h-[44px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <Share2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                <span>{whatsappCopied ? 'Hazır' : 'WhatsApp ile Gönder'}</span>
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed border-t border-slate-100 pt-3">
+              Ev sahibiniz sizi aday olarak seçtiğinde eşleşme daveti alacaksınız.
+            </p>
           </div>
 
-          <div className="mt-6 flex-1 flex flex-col gap-4 text-center">
-            <h2 className="text-lg sm:text-xl font-display font-bold text-[#0B192C]">
-              2. Adım: Ev Sahibi Eşleşme Davetini Onaylayın
-            </h2>
-            <p className="text-sm text-slate-600 leading-relaxed text-left">
-              Ev sahibiniz profilinizi inceleyip sizi aday olarak onayladığında sistem üzerinden
-              size özel 6 haneli bir eşleşme kodu iletir. Bu kodu girerek mülk eşleşmesini
-              tamamladığınızda; depozitonuzu koruyan Teslim Tutanağı ve resmi sicilinizi oluşturan
-              Kira Ödemeleri sekmeleri açılır.
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-left">
+            <h3 className="text-sm font-display font-bold text-[#0B192C]">
+              Ev sahibi eşleşme kodunuz var mı?
+            </h3>
+            <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+              Ev sahibiniz sizi aday olarak seçtiyse size gönderilen 6 haneli kodu burada girin.
             </p>
-            <form onSubmit={submitWizardInvite} className="mt-auto flex flex-col gap-2 pt-2">
+            <form onSubmit={submitWizardInvite} className="mt-3 flex items-center gap-2">
               <label htmlFor="home-invite-code" className="sr-only">
                 6 haneli davet kodu
               </label>
@@ -312,14 +331,14 @@ export function TrustCardScreen({
                 value={inviteCode}
                 onChange={(event) => setInviteCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
                 placeholder="6 haneli kod"
-                className="w-full min-h-[48px] px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-center text-lg font-mono-tabular tracking-[0.28em] text-[#0B192C] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                className="min-w-0 flex-1 h-10 px-3 bg-white border border-slate-200 rounded-xl text-center text-sm font-mono-tabular tracking-[0.18em] text-[#0B192C] focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
               <button
                 type="submit"
                 disabled={inviteCode.length !== 6}
-                className="w-full min-h-[48px] px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl"
+                className="h-10 shrink-0 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl"
               >
-                Daveti Onayla
+                Onayla
               </button>
             </form>
           </div>

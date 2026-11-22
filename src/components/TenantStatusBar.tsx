@@ -35,10 +35,16 @@ export function TenantStatusBar({
               </span>
             </>
           ) : matchDismissed && !hasVerifiedHistory ? (
-            <span className="text-xs sm:text-sm font-semibold text-[#0B192C] leading-relaxed">
-              Kiracılık Durumum: İlk Kiralama Adayı — Davet kodu girdiğinizde tutanak ve ödeme
-              sekmeleri aktif olur.
-            </span>
+            <div className="min-w-0 py-0.5">
+              <p className="text-sm sm:text-base font-display font-bold text-[#0B192C] leading-snug">
+                Henüz aktif bir kiracılığınız yok
+              </p>
+              <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed">
+                Ev sahibiyle eşleştiğinizde teslim tutanağınızı oluşturabilir ve kira ödeme
+                geçmişinizi kaydetmeye başlayabilirsiniz. Şimdilik Kiracı Pasaportunuzu paylaşarak
+                güven profilinizi ev sahiplerine sunabilirsiniz.
+              </p>
+            </div>
           ) : matchDismissed ? (
             <>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-emerald-50 border-emerald-200 text-xs font-semibold text-emerald-800 shrink-0">
