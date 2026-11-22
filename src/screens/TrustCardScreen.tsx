@@ -1,7 +1,101 @@
-import { useEffect, useState } from 'react';
-import { ShieldCheck, CheckCircle2, Copy, Share2 } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  ShieldCheck,
+  CheckCircle2,
+  Copy,
+  Share2,
+  Camera,
+  Landmark,
+  KeyRound,
+  type LucideIcon,
+} from 'lucide-react';
 import { ensureProfileShareCode } from '../lib/account';
 import { HandoverChecklistState, UserSession } from '../types/kiracimkim';
+
+const PASSPORT_BENEFITS: Array<{ icon: LucideIcon; title: string; body: string }> = [
+  {
+    icon: Camera,
+    title: 'Depozito Güvencesi (Teslim Tutanağı)',
+    body: 'Eve girerken çektiğiniz oda fotoğrafları ve demirbaş durumu karşılıklı onaylanarak kayıt altına alınır; çıkarken haksız depozito kesintisi yaşamazsınız.',
+  },
+  {
+    icon: Landmark,
+    title: 'Resmi Kira Sicili (Banka Dekontları)',
+    body: "Her ay yüklediğiniz banka dekontları doğrulanarak bir sonraki ev görüşmenizde size güçlü bir 'Güvenilir Kiracı' referansı oluşturur.",
+  },
+  {
+    icon: KeyRound,
+    title: 'Tek Kodla Hızlı Onay',
+    body: 'Ev sahiplerine tek tek belge veya kefil anlatmak yerine sadece KMK- kodunuzu paylaşarak güven profilinizi tek tıkla sunarsınız.',
+  },
+];
+
+const PASSPORT_STEPS = [
+  'Kodu Paylaş',
+  'Eşleşme Davetini Onayla',
+  'Tutanak & Dekontları Yönet',
+];
+
+function PassportBenefits() {
+  return (
+    <aside className="min-w-0 h-full">
+      <div className="h-full bg-white border border-slate-200/90 rounded-3xl shadow-sm p-6 sm:p-7 flex flex-col">
+        <h2 className="text-lg sm:text-xl font-display font-bold text-[#0B192C] leading-snug">
+          Kiracı Pasaportu Size Ne Kazandırır?
+        </h2>
+        <div className="mt-5 space-y-3 flex-1">
+          {PASSPORT_BENEFITS.map((benefit) => {
+            const Icon = benefit.icon;
+            return (
+              <article
+                key={benefit.title}
+                className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
+                    <Icon className="w-4 h-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-display font-bold text-[#0B192C] leading-snug">
+                      {benefit.title}
+                    </h3>
+                    <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">{benefit.body}</p>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        <p className="mt-5 rounded-2xl bg-[#0B192C] px-4 py-3.5 text-center text-xs sm:text-[13px] font-semibold leading-6 text-white">
+          <span className="whitespace-nowrap">1. {PASSPORT_STEPS[0]}</span>
+          <span className="whitespace-nowrap">
+            <span className="mx-1.5 text-emerald-300" aria-hidden="true">
+              →
+            </span>
+            2. {PASSPORT_STEPS[1]}
+          </span>
+          <span className="whitespace-nowrap">
+            <span className="mx-1.5 text-emerald-300" aria-hidden="true">
+              →
+            </span>
+            3. {PASSPORT_STEPS[2]}
+          </span>
+        </p>
+      </div>
+    </aside>
+  );
+}
+
+function TrustPassportLayout({ children }: { children: ReactNode }) {
+  return (
+    <section className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 items-start lg:items-stretch">
+        <div className="min-w-0 flex flex-col gap-5">{children}</div>
+        <PassportBenefits />
+      </div>
+    </section>
+  );
+}
 
 interface TrustCardScreenProps {
   session: UserSession;
@@ -144,7 +238,7 @@ export function TrustCardScreen({
 
   if (!hasActiveRental && pendingMatch) {
     return (
-      <section className="max-w-xl mx-auto px-4 sm:px-6 py-8 sm:py-14 space-y-5">
+      <TrustPassportLayout>
         <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-6 sm:p-8">
           {shareCodePanel}
         </div>
@@ -157,7 +251,7 @@ export function TrustCardScreen({
             onayladı! Ev sahibinizin sizinle paylaştığı 6 haneli kodu aşağıya girerek süreci
             başlatın.
           </p>
-          <form onSubmit={submitWizardInvite} className="flex flex-col sm:flex-row gap-2">
+          <form onSubmit={submitWizardInvite} className="flex flex-col gap-2">
             <label htmlFor="pending-invite-code" className="sr-only">
               6 haneli onay kodu
             </label>
@@ -173,39 +267,41 @@ export function TrustCardScreen({
             <button
               type="submit"
               disabled={inviteCode.length !== 6}
-              className="min-h-[48px] px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl whitespace-nowrap"
+              className="w-full min-h-[48px] px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl"
             >
               Kodu Doğrula ve Başla
             </button>
           </form>
         </div>
-      </section>
+      </TrustPassportLayout>
     );
   }
 
   if (!hasActiveRental) {
     return (
-      <section className="max-w-xl mx-auto px-4 sm:px-6 py-8 sm:py-14">
-        <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-6 sm:p-8 space-y-6">
+      <TrustPassportLayout>
+        <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-6 sm:p-8 h-full flex flex-col">
           {shareCodePanel}
 
-          <div className="flex items-center gap-3">
+          <div className="mt-6 flex items-center gap-3">
             <span className="h-px flex-1 bg-slate-200" />
-            <p className="text-xs text-slate-500 whitespace-nowrap">
+            <p className="text-xs text-slate-500 text-center">
               ↓ Ev sahibiniz sizi aday olarak seçtiğinde
             </p>
             <span className="h-px flex-1 bg-slate-200" />
           </div>
 
-          <div className="space-y-4 text-center">
+          <div className="mt-6 flex-1 flex flex-col gap-4 text-center">
             <h2 className="text-lg sm:text-xl font-display font-bold text-[#0B192C]">
-              2. Adım: 6 Haneli Davet Kodunu Onaylayın
+              2. Adım: Ev Sahibi Eşleşme Davetini Onaylayın
             </h2>
-            <p className="text-sm text-slate-600 leading-relaxed">
-              Ev sahibinizin ilettiği 6 haneli kodu girin. Onayladığınız anda Teslim Tutanağı ve
-              Kira Ödemeleri sekmeleri açılır
+            <p className="text-sm text-slate-600 leading-relaxed text-left">
+              Ev sahibiniz profilinizi inceleyip sizi aday olarak onayladığında sistem üzerinden
+              size özel 6 haneli bir eşleşme kodu iletir. Bu kodu girerek mülk eşleşmesini
+              tamamladığınızda; depozitonuzu koruyan Teslim Tutanağı ve resmi sicilinizi oluşturan
+              Kira Ödemeleri sekmeleri açılır.
             </p>
-            <form onSubmit={submitWizardInvite} className="flex flex-col sm:flex-row gap-2">
+            <form onSubmit={submitWizardInvite} className="mt-auto flex flex-col gap-2 pt-2">
               <label htmlFor="home-invite-code" className="sr-only">
                 6 haneli davet kodu
               </label>
@@ -221,19 +317,19 @@ export function TrustCardScreen({
               <button
                 type="submit"
                 disabled={inviteCode.length !== 6}
-                className="min-h-[48px] px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl whitespace-nowrap"
+                className="w-full min-h-[48px] px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl"
               >
                 Daveti Onayla
               </button>
             </form>
           </div>
         </div>
-      </section>
+      </TrustPassportLayout>
     );
   }
 
   return (
-    <section className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
+    <TrustPassportLayout>
       <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm p-6 sm:p-8">
         {shareCodePanel}
       </div>
@@ -321,6 +417,6 @@ export function TrustCardScreen({
           </div>
         )}
       </div>
-    </section>
+    </TrustPassportLayout>
   );
 }
