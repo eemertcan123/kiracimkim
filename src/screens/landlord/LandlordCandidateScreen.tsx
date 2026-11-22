@@ -117,10 +117,15 @@ export function LandlordCandidateScreen({
             ...trust,
             isFirstRental: first,
             verifiedPaymentsSummary: first
-              ? '0 Onaylı Dekont (İlk Kiralama)'
+              ? 'İlk Kiralama Adayı (Kayıtlı geçmiş kira verisi yok)'
               : `${payments} Onaylı Dekont`,
-            handoverCountText: handovers > 0 ? `${handovers} Teslim Tutanağı` : 'Henüz Yok',
-            referenceCountText: `${refs} Referans`,
+            handoverCountText:
+              handovers > 0
+                ? `${handovers} Teslim Tutanağı`
+                : first
+                  ? 'Teslim Tutanağı: Eşleşme sonrası oluşturulacak'
+                  : 'Henüz Yok',
+            referenceCountText: first ? 'Kayıtlı geçmiş kira verisi yok' : `${refs} Referans`,
             delayDetails: '',
           };
         });
@@ -486,22 +491,37 @@ export function LandlordCandidateScreen({
                           Mevcut Sicil
                         </p>
                         <div className="flex flex-wrap gap-2">
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
-                            <Receipt className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                            {(selectedCandidate.approvedPaymentCount ?? 0) > 0
-                              ? `${selectedCandidate.approvedPaymentCount} Onaylı Dekont`
-                              : '0 Onaylı Dekont (İlk Kiralama)'}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-[#0B192C]">
-                            <FileCheck2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                            {(selectedCandidate.handoverCount ?? 0) > 0
-                              ? `${selectedCandidate.handoverCount} Teslim Tutanağı`
-                              : 'Teslim Tutanağı: Henüz Yok'}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-[#0B192C]">
-                            <Award className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                            {selectedCandidate.referenceCount ?? 0} Referans
-                          </span>
+                          {(selectedCandidate.approvedPaymentCount ?? 0) > 0 ||
+                          (selectedCandidate.handoverCount ?? 0) > 0 ||
+                          (selectedCandidate.referenceCount ?? 0) > 0 ? (
+                            <>
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
+                                <Receipt className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                                {selectedCandidate.approvedPaymentCount ?? 0} Onaylı Dekont
+                              </span>
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-[#0B192C]">
+                                <FileCheck2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                                {(selectedCandidate.handoverCount ?? 0) > 0
+                                  ? `${selectedCandidate.handoverCount} Teslim Tutanağı`
+                                  : 'Teslim Tutanağı: Henüz Yok'}
+                              </span>
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-[#0B192C]">
+                                <Award className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                                {selectedCandidate.referenceCount ?? 0} Referans
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
+                                <Award className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                                İlk Kiralama Adayı (Kayıtlı geçmiş kira verisi yok)
+                              </span>
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-[#0B192C]">
+                                <FileCheck2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                                Teslim Tutanağı: Eşleşme sonrası oluşturulacak
+                              </span>
+                            </>
+                          )}
                         </div>
                         {selectedCandidate.referenceComment ? (
                           <p className="text-sm text-[#0B192C] leading-relaxed">
@@ -511,27 +531,22 @@ export function LandlordCandidateScreen({
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-semibold text-emerald-700">1. Davet ve Taahhüt</p>
-                        <p className="mt-1.5 text-sm text-[#0B192C] leading-relaxed">
-                          Adaya 6 haneli davet kodu gönderilir; aday daveti onaylarken şeffaflık
-                          taahhüdünü seçer.
+                    {(selectedCandidate.approvedPaymentCount ?? 0) === 0 &&
+                      (selectedCandidate.handoverCount ?? 0) === 0 &&
+                      (selectedCandidate.referenceCount ?? 0) === 0 &&
+                      selectedCandidate.trustLoaded === true && (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+                        <p className="text-sm font-display font-bold text-[#0B192C]">
+                          Bu adayı davet ettiğinizde ne olur?
+                        </p>
+                        <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">
+                          Adayın sistemde geçmiş kiralama kaydı bulunmuyor. Davet gönderdiğinizde
+                          adaya 6 haneli eşleşme kodu iletilir; aday daveti onaylarken Şeffaflık
+                          Taahhüdü&apos;nü (giriş teslim tutanağı ve aylık banka dekontu paylaşımı)
+                          kabul edip etmediğini panelinize bildirir.
                         </p>
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-semibold text-emerald-700">2. Dijital Teslim Tutanağı</p>
-                        <p className="mt-1.5 text-sm text-[#0B192C] leading-relaxed">
-                          Giriş fotoğrafları ve mülk durumu karşılıklı onaylanır.
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-semibold text-emerald-700">3. Düzenli Dekont Takibi</p>
-                        <p className="mt-1.5 text-sm text-[#0B192C] leading-relaxed">
-                          Aylık kira dekontları panelinizden doğrulanır.
-                        </p>
-                      </div>
-                    </div>
+                    )}
 
                     <div className="pt-2 border-t border-slate-100">
                       {tenantRental?.status === 'active' ? (
