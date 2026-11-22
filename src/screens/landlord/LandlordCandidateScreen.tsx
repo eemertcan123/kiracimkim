@@ -661,7 +661,7 @@ export function LandlordCandidateScreen({
           className="fixed inset-0 z-50 bg-[#0B192C]/75 backdrop-blur-sm flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
-          aria-label="Kiracı Olarak Ekle ve Onay Gönder"
+          aria-label="Kiracılık Daveti Gönder"
         >
           <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-200">
             <div className="bg-[#0B192C] text-white px-6 py-4 flex items-center justify-between">
@@ -670,7 +670,7 @@ export function LandlordCandidateScreen({
                   {selectedCandidate.maskedName} • {selectedCandidate.code}
                 </p>
                 <h3 className="text-base font-display font-bold mt-0.5">
-                  Kiracı Olarak Ekle ve Onay Gönder
+                  Kiracılık Daveti Gönder
                 </h3>
               </div>
               <button
@@ -702,11 +702,15 @@ export function LandlordCandidateScreen({
               </div>
             ) : (
               <form onSubmit={handleSubmitCandidateInvite} className="p-6 space-y-4">
-                <p className="text-sm text-[#0B192C] leading-relaxed">
-                  {hasVacantProperties
-                    ? 'Adayı hangi mülkünüze davet etmek istiyorsunuz? Kayıtlı boş dairenizi seçin veya yeni daire tanımlayın.'
-                    : 'Adayı hangi mülkünüze davet etmek istiyorsunuz? Davet için yeni daire bilgilerini girin.'}
-                </p>
+                <div>
+                  <p className="text-sm font-display font-bold text-[#0B192C]">
+                    Kiracılık daveti oluştur
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600 leading-relaxed">
+                    Bu adayı kiracı olarak eşleştirmek istediğiniz dairenin bilgilerini girin. Bu
+                    bilgiler davet mesajında kiracıya gösterilecek.
+                  </p>
+                </div>
                 {hasVacantProperties ? (
                   <div
                     className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 border border-slate-200/90 rounded-2xl"
@@ -778,14 +782,14 @@ export function LandlordCandidateScreen({
                         htmlFor="invite-new-title"
                         className="block text-xs font-semibold text-[#0B192C] mb-1.5"
                       >
-                        Daire Başlığı
+                        Mülk / Daire Adı
                       </label>
                       <input
                         id="invite-new-title"
                         type="text"
                         value={newPropertyTitle}
                         onChange={(e) => setNewPropertyTitle(e.target.value)}
-                        placeholder="Örn: Moda Dairesi 2+1"
+                        placeholder="Örn. Moda Sahil Dairesi 2+1"
                         className="w-full min-h-[46px] px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-[#0B192C] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
                       />
                     </div>
@@ -794,26 +798,30 @@ export function LandlordCandidateScreen({
                         htmlFor="invite-new-district"
                         className="block text-xs font-semibold text-[#0B192C] mb-1.5"
                       >
-                        İlçe / Mahalle
+                        Mülk Konumu
                       </label>
                       <input
                         id="invite-new-district"
                         type="text"
                         value={newPropertyDistrict}
                         onChange={(e) => setNewPropertyDistrict(e.target.value)}
-                        placeholder="Örn: Kadıköy / Caferağa"
+                        placeholder="Örn. Kadıköy / Caferağa Mah."
                         className="w-full min-h-[46px] px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-[#0B192C] focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
                       />
                     </div>
                   </div>
                 )}
 
-                <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3 flex items-start gap-2.5 text-xs text-slate-600 leading-relaxed">
+                <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3 flex items-start gap-2.5">
                   <Info className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" aria-hidden="true" />
-                  <span>
-                    Davet gönderildiğinde daireniz kiracıyla eşleştirilir. Kiracı uygulama üzerinden
-                    daveti onayladığında teslim tutanağı ve ödeme süreci bu daire için aktif olur.
-                  </span>
+                  <div>
+                    <p className="text-xs font-bold text-[#0B192C]">Davet gönderildiğinde</p>
+                    <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+                      Kiracıya mülkünüzün bilgileriyle bir eşleşme daveti gönderilir. Kiracı daveti
+                      kabul ettiğinde eşleşme tamamlanır ve dijital teslim tutanağı ile kira ödeme
+                      kayıtları bu kiracılık için açılır.
+                    </p>
+                  </div>
                 </div>
 
                 {candidateInviteError && (
@@ -832,7 +840,7 @@ export function LandlordCandidateScreen({
                     className="flex-1 min-h-[46px] px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 text-white font-semibold text-sm rounded-xl transition-colors inline-flex items-center justify-center gap-2"
                   >
                     <Send className="w-4 h-4 shrink-0" aria-hidden="true" />
-                    <span>{inviteSending ? 'İletiliyor…' : 'Davet Gönder / Onaya Sun'}</span>
+                    <span>{inviteSending ? 'İletiliyor…' : 'Kiracılık Daveti Gönder'}</span>
                   </button>
                   <button
                     type="button"
