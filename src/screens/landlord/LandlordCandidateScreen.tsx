@@ -487,8 +487,8 @@ export function LandlordCandidateScreen({
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Mevcut Sicil
+                        <p className="text-xs font-semibold tracking-wide text-slate-500">
+                          KİRACI GEÇMİŞİ
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {(selectedCandidate.approvedPaymentCount ?? 0) > 0 ||
@@ -537,20 +537,20 @@ export function LandlordCandidateScreen({
                       selectedCandidate.trustLoaded === true && (
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                         <p className="text-sm font-display font-bold text-[#0B192C]">
-                          Bu adayı davet ettiğinizde ne olur?
+                          Bu aday davet edildiğinde
                         </p>
                         <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">
-                          Adayın sistemde geçmiş kiralama kaydı bulunmuyor. Davet gönderdiğinizde
-                          adaya 6 haneli eşleşme kodu iletilir; aday daveti onaylarken Şeffaflık
-                          Taahhüdü&apos;nü (giriş teslim tutanağı ve aylık banka dekontu paylaşımı)
-                          kabul edip etmediğini panelinize bildirir.
+                          Bu adayın KiracımKim üzerinde henüz doğrulanmış kira geçmişi bulunmuyor.
+                          Davet gönderildiğinde adaya 6 haneli eşleşme kodu iletilir. Aday, daveti
+                          kabul ederek Kiracı Taahhüdünü onaylayabilir ve kiracılık sürecini
+                          başlatabilir.
                         </p>
                       </div>
                     )}
 
-                    <div className="pt-2 border-t border-slate-100">
+                    <div>
                       {tenantRental?.status === 'active' ? (
-                        <div className="space-y-3">
+                        <div className="space-y-3 pt-2 border-t border-slate-100">
                           <div className="bg-emerald-50 border border-emerald-300 rounded-2xl px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <p className="text-sm font-semibold text-emerald-900 leading-snug">
                               ✅ Kiracı Daveti Onayladı • Kiralama Aktif
@@ -626,12 +626,7 @@ export function LandlordCandidateScreen({
                           </div>
                         </div>
                       ) : tenantRentalReady ? (
-                        <div className="space-y-3">
-                          <p className="text-sm text-slate-600 leading-relaxed">
-                            Bu adayı mülkünüz için uygun buluyorsanız kiracılık sürecini başlatmak
-                            üzere davet gönderebilirsiniz.
-                          </p>
-                          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
                             <button
                               type="button"
                               onClick={handleResetLookup}
@@ -646,11 +641,10 @@ export function LandlordCandidateScreen({
                               className="min-h-[48px] px-5 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 text-white text-sm font-semibold rounded-xl transition-colors inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-600"
                             >
                               <span>
-                                {inviteSending ? 'İletiliyor…' : 'Adayı Onayla ve Davet Gönder'}
+                                {inviteSending ? 'İletiliyor…' : 'Kiracılık Daveti Gönder'}
                               </span>
                             </button>
                           </div>
-                        </div>
                       ) : null}
                     </div>
                   </div>
