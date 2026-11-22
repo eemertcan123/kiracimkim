@@ -43,23 +43,25 @@ function PassportBenefits() {
         <h2 className="text-lg sm:text-xl font-display font-bold text-[#0B192C] leading-snug">
           Kiracı Pasaportu Neden Önemli?
         </h2>
-        <div className="mt-5 space-y-3 flex-1">
+        <div className="mt-4 md:mt-5 flex flex-col gap-2.5 md:gap-3 flex-1">
           {PASSPORT_BENEFITS.map((benefit) => {
             const Icon = benefit.icon;
             return (
               <article
                 key={benefit.title}
-                className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4"
+                className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3.5 md:p-4"
               >
-                <div className="flex items-start gap-3">
-                  <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
-                    <Icon className="w-4 h-4" aria-hidden="true" />
+                <div className="flex items-start gap-2.5 md:gap-3">
+                  <span className="mt-0.5 inline-flex h-7 w-7 md:h-9 md:w-9 shrink-0 items-center justify-center rounded-lg md:rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
+                    <Icon className="w-3.5 h-3.5 md:w-4 md:h-4" aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-display font-bold text-[#0B192C] leading-snug">
+                    <h3 className="text-sm font-display font-bold text-[#0B192C] leading-tight">
                       {benefit.title}
                     </h3>
-                    <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">{benefit.body}</p>
+                    <p className="mt-0.5 md:mt-1.5 text-sm text-slate-600 leading-snug md:leading-relaxed">
+                      {benefit.body}
+                    </p>
                   </div>
                 </div>
               </article>

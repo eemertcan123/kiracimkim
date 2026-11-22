@@ -1106,7 +1106,7 @@ export default function App() {
         />
       )}
 
-      <main className="flex-1 pb-24 lg:pb-12">
+      <main className="flex-1 pb-28 lg:pb-12">
 
         {(!session.authenticated || activeScreen === 'login') && (
           <LoginScreen

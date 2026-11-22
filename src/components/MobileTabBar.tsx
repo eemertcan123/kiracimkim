@@ -39,7 +39,7 @@ export function MobileTabBar({
   return (
     <nav
       aria-label="Mobil ekran navigasyonu"
-      className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 pb-safe"
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90"
     >
       <div className="grid grid-cols-3 items-center h-16">
         {tabs.map((tab) => {
@@ -58,15 +58,15 @@ export function MobileTabBar({
               aria-disabled={isLocked}
               className={`relative flex flex-col items-center justify-center min-h-[44px] h-full px-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600 ${
                 isLocked
-                  ? 'text-slate-300 cursor-not-allowed opacity-70'
+                  ? 'text-slate-400 cursor-not-allowed opacity-40'
                   : isActive
-                  ? 'text-emerald-700'
+                  ? 'text-[#0B192C]'
                   : 'text-slate-500 hover:text-[#0B192C]'
               }`}
             >
               {isActive && (
                 <span
-                  className="absolute top-0 w-8 h-0.5 bg-emerald-600 rounded-b-full"
+                  className="absolute top-0 w-8 h-0.5 bg-[#0B192C] rounded-b-full"
                   aria-hidden="true"
                 />
               )}
@@ -74,9 +74,9 @@ export function MobileTabBar({
                 <Icon
                   className={`w-[22px] h-[22px] shrink-0 ${
                     isLocked
-                      ? 'text-slate-300 stroke-[1.75]'
+                      ? 'stroke-[1.75]'
                       : isActive
-                      ? 'text-emerald-600 stroke-[2.25]'
+                      ? 'text-[#0B192C] stroke-[2.5]'
                       : 'stroke-[1.75]'
                   }`}
                   aria-hidden="true"
@@ -90,11 +90,7 @@ export function MobileTabBar({
               </div>
               <span
                 className={`text-[11px] tracking-tight mt-1 whitespace-nowrap ${
-                  isLocked
-                    ? 'font-medium text-slate-400'
-                    : isActive
-                    ? 'font-semibold text-[#0B192C]'
-                    : 'font-medium'
+                  isActive ? 'font-bold text-[#0B192C]' : 'font-medium'
                 }`}
               >
                 {tab.label}
@@ -103,6 +99,7 @@ export function MobileTabBar({
           );
         })}
       </div>
+      <div className="pb-safe" aria-hidden="true" />
     </nav>
   );
 }

@@ -1,4 +1,4 @@
-import { ShieldCheck, ArrowLeftRight, Lock } from 'lucide-react';
+import { ShieldCheck, ArrowLeftRight, Lock, LogOut } from 'lucide-react';
 import { ScreenId, UserRole } from '../types/kiracimkim';
 
 interface TopNavProps {
@@ -43,7 +43,7 @@ export function TopNav({
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        {/* Mobile Compact Top App Bar (52px) */}
+        {/* Mobile Compact Top App Bar (52px). Screen title stays in the bottom nav below md. */}
         <div className="flex lg:hidden items-center justify-between h-[52px] gap-2">
           <button
             type="button"
@@ -54,28 +54,40 @@ export function TopNav({
             <span>Kiracımkim</span>
           </button>
 
-          <span className="text-xs sm:text-sm font-semibold text-slate-700 truncate">
+          <span className="hidden md:block min-w-0 text-sm font-semibold text-slate-700 truncate text-center">
             {currentMobileTitle}
           </span>
 
-          {onLogout && (
+          <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
-              onClick={onLogout}
-              className="min-h-[44px] px-2 text-xs font-semibold text-slate-600 hover:text-[#0B192C] whitespace-nowrap shrink-0"
+              onClick={handleToggleRole}
+              aria-label="Rol Değiştir (Kiracı / Ev Sahibi)"
+              className="min-h-[44px] px-2.5 inline-flex items-center gap-1.5 text-xs font-semibold text-[#0B192C] bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
             >
-              Çıkış
+              <ArrowLeftRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
+              <span>{role === 'tenant' ? 'Ev Sahibi' : 'Kiracı'}</span>
             </button>
-          )}
-          <button
-            type="button"
-            onClick={handleToggleRole}
-            aria-label="Rol Değiştir (Kiracı / Ev Sahibi)"
-            className="min-h-[44px] px-2.5 inline-flex items-center gap-1.5 text-xs font-semibold text-[#0B192C] bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
-          >
-            <ArrowLeftRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
-            <span>{role === 'tenant' ? 'Ev Sahibi' : 'Kiracı'}</span>
-          </button>
+            {onLogout && (
+              <>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  aria-label="Çıkış"
+                  className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 hover:text-[#0B192C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                >
+                  <LogOut className="w-4 h-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="hidden md:inline-flex min-h-[44px] px-2 text-xs font-semibold text-slate-600 hover:text-[#0B192C] whitespace-nowrap"
+                >
+                  Çıkış
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Desktop 3-Zone Top Bar Contract */}
