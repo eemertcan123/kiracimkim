@@ -85,6 +85,8 @@ export interface TenantHistoryReference {
 export interface TenantHistory {
   approvedPaymentCount: number;
   references: TenantHistoryReference[];
+  rentals: { id: string; title: string; active: boolean }[];
+  payments: Pick<RentReceipt, 'id' | 'monthLabel' | 'propertyNickname' | 'amount' | 'status'>[];
 }
 
 export interface PendingMatch {
@@ -340,6 +342,7 @@ export function mapPropertyRow(row: PropertyRow): LandlordProperty {
   const district = row.district?.trim() || 'Konum belirtilmedi';
   return {
     id: row.id,
+    landlordUserId: row.landlord_id,
     nickname: row.title,
     officialLocation: district,
     fullAddress: district,
@@ -471,11 +474,13 @@ export async function ensureProfileShareCode(userId: string) {
   return saveProfileShareCode(userId, await uniqueKarneCode());
 }
 
+export const TENANT_GUIDE_STORAGE_PREFIX = 'kiracimkim.tenantGuide.v1.';
+
 export function clearAppStorage() {
   try {
     for (const store of [localStorage, sessionStorage]) {
       for (const key of Object.keys(store)) {
-        if (key.startsWith('sb-')) continue;
+        if (key.startsWith('sb-') || key.startsWith(TENANT_GUIDE_STORAGE_PREFIX)) continue;
         store.removeItem(key);
       }
     }
@@ -488,7 +493,9 @@ export async function signOutAccount() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
   try {
-    localStorage.clear();
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith(TENANT_GUIDE_STORAGE_PREFIX)) localStorage.removeItem(key);
+    }
     sessionStorage.clear();
   } catch {
     return;
@@ -813,7 +820,6 @@ export async function loadWorkspace(userId: string) {
     .filter((item) => item.landlord_id === userId)
     .map((item) => {
       const property = mapPropertyRow(item);
-      property.landlordUserId = item.landlord_id;
       const rental = rentals.find(
         (entry) => entry.property_id === item.id && rentalPhase(entry.status) !== 'closed'
       );
@@ -915,20 +921,48 @@ export async function loadWorkspace(userId: string) {
   }
 
   const referenceRows = await loadTenantReferences(userId);
-  const tenantHistory = {
+  const tenantRentalsWithPayments = rentals
+    .filter((entry) => entry.tenant_id === userId)
+    .map((entry) => ({
+      entry,
+      title: (entry.property_id && propertyById.get(entry.property_id)?.title) || 'Daire',
+      payments: parsePaymentRecords(entry.payment_records),
+    }));
+  const tenantTablePayments = rentPayments.filter((receipt) => receipt.tenantId === userId);
+  const storedPayments = tenantRentalsWithPayments.flatMap(({ title, payments }) =>
+    payments.map((payment) => ({
+      id: payment.id,
+      monthLabel: payment.period,
+      propertyNickname: title,
+      amount: payment.amount,
+      status: paymentStatusLabel(payment.status),
+    }))
+  );
+  const storedPaymentIds = new Set(storedPayments.map(({ id }) => id));
+  const tenantHistory: TenantHistory = {
     approvedPaymentCount:
-      rentals
-        .filter((entry) => entry.tenant_id === userId)
-        .flatMap((entry) => parsePaymentRecords(entry.payment_records))
-        .filter((row) => row.status === 'approved').length +
-      rentPayments.filter((receipt) => receipt.tenantId === userId && receipt.status === 'Onaylandı')
-        .length,
+      storedPayments.filter((payment) => payment.status === 'Onaylandı').length +
+      tenantTablePayments.filter((payment) => payment.status === 'Onaylandı').length,
     references: referenceRows.map((row) => ({
       id: row.id,
       landlordName: row.landlord_name?.trim() || 'Ev Sahibi',
       comment: row.comment?.trim() || '',
       signedAt: formatStamp(row.created_at ?? undefined),
     })),
+    rentals: tenantRentalsWithPayments.flatMap(({ entry, title, payments }) => {
+      const active = rentalPhase(entry.status) === 'active';
+      return active || entry.tenant_submitted || entry.landlord_approved || payments.length > 0
+        ? [{ id: entry.id, title, active }]
+        : [];
+    }),
+    payments: [
+      ...storedPayments,
+      ...tenantTablePayments
+        .filter(({ id }) => !storedPaymentIds.has(id))
+        .map(({ id, monthLabel, propertyNickname, amount, status }) => ({
+          id, monthLabel, propertyNickname, amount, status,
+        })),
+    ],
   };
 
   const session = toSession(profile);
@@ -978,11 +1012,33 @@ export async function insertProperty(input: {
   return mapPropertyRow(data as PropertyRow);
 }
 
+export async function findOrInsertPropertyForInvite(input: Parameters<typeof insertProperty>[0]) {
+  const { data, error } = await supabase
+    .from('properties')
+    .select('id, title, district, landlord_id')
+    .eq('landlord_id', input.landlordId);
+  if (error) throw error;
+
+  const normalize = (value: string | null) =>
+    (value ?? '').normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
+  const title = normalize(input.title);
+  const district = normalize(input.district);
+  const matches = ((data ?? []) as PropertyRow[]).filter(
+    (property) => normalize(property.title) === title && normalize(property.district) === district
+  );
+  if (matches.length > 1) {
+    throw new Error('Bu ad ve konumla birden fazla daire kayıtlı. Listeden davet edeceğiniz daireyi seçin.');
+  }
+  if (matches.length === 1) return mapPropertyRow(matches[0]);
+  return insertProperty(input);
+}
+
 export interface LandlordTenantRental {
   id: string;
   propertyId: string | null;
   status: 'pending' | 'active';
   inviteCode: string | null;
+  landlordApproved: boolean;
 }
 
 function mapOpenRental(row: RentalRow): LandlordTenantRental | null {
@@ -993,6 +1049,7 @@ function mapOpenRental(row: RentalRow): LandlordTenantRental | null {
     propertyId: row.property_id,
     status: phase,
     inviteCode: row.invite_code ?? null,
+    landlordApproved: row.landlord_approved === true,
   };
 }
 
@@ -1009,8 +1066,15 @@ export async function loadLandlordTenantRental(
       .order('created_at', { ascending: false });
 
   let { data, error } = await filters(
-    'id, property_id, landlord_id, tenant_id, status, invite_code, created_at'
+    'id, property_id, landlord_id, tenant_id, status, invite_code, landlord_approved, created_at'
   );
+  if (error && /landlord_approved/i.test(error.message ?? '')) {
+    const retry = await filters(
+      'id, property_id, landlord_id, tenant_id, status, invite_code, created_at'
+    );
+    data = retry.data;
+    error = retry.error;
+  }
   if (error && /invite_code/i.test(error.message ?? '')) {
     const retry = await filters('id, property_id, landlord_id, tenant_id, status, created_at');
     data = retry.data;
@@ -1064,19 +1128,29 @@ export async function createRentalMatch(input: {
   landlordId: string;
   carnetCode: string;
 }) {
+  const { data: ownedProperty, error: propertyError } = await supabase
+    .from('properties')
+    .select('id')
+    .eq('id', input.propertyId)
+    .eq('landlord_id', input.landlordId)
+    .maybeSingle();
+  if (propertyError) throw propertyError;
+  if (!ownedProperty) throw new Error('Bu mülk için davet kodu oluşturma yetkiniz yok.');
+
   const tenant = await findProfileByShareCode(input.carnetCode.trim());
   if (!tenant) throw new Error('Bu karne koduna ait kiracı bulunamadı.');
 
   const { data: existing, error: existingError } = await supabase
     .from('rentals')
-    .select('id, status')
-    .eq('property_id', input.propertyId)
-    .eq('tenant_id', tenant.id)
-    .limit(1);
+    .select('status')
+    .eq('property_id', input.propertyId);
   if (existingError) throw existingError;
-  const openInvite = (existing ?? []).find((row) => rentalPhase(row.status) !== 'closed');
-  if (openInvite) {
-    throw new Error('Bu kiracı için bu dairede zaten bir davet kaydı var.');
+  const phases = (existing ?? []).map((row) => rentalPhase(row.status));
+  if (phases.includes('active')) {
+    throw new Error('Bu dairede aktif bir kiracılık var.');
+  }
+  if (phases.includes('pending')) {
+    throw new Error('Bu daire için onay bekleyen bir davet var.');
   }
 
   const inviteCode = await uniqueInviteCode();

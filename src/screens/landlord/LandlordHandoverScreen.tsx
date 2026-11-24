@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ResilientImage } from '../../components/ResilientImage';
 import { WriteTenantReferenceModal } from '../../components/WriteTenantReferenceModal';
+import { roomsWithoutPhotos } from '../../lib/handoverSteps';
 import { HandoverPhoto, LandlordProperty, LandlordReference } from '../../types/kiracimkim';
 
 const OBJECTION_TEMPLATES = [
@@ -41,19 +42,6 @@ interface LandlordHandoverScreenProps {
   onSignReference: (propertyId: string, next: LandlordReference) => void;
   onOpenPayments: (propertyId: string) => void;
   onNotify: (message: string) => void;
-}
-
-function TenantReferenceButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="min-h-[42px] px-4 py-2 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 text-xs sm:text-sm font-semibold rounded-xl transition-colors inline-flex items-center gap-2 whitespace-nowrap"
-    >
-      <FileSignature className="w-4 h-4 shrink-0" aria-hidden="true" />
-      <span>Kiracıma Referans Yaz</span>
-    </button>
-  );
 }
 
 export function LandlordHandoverScreen({
@@ -194,9 +182,7 @@ export function LandlordHandoverScreen({
 
   // AŞAMA 1: ANA EKRAN (GELEN KUTUSU & MÜLK LİSTESİ)
   if (!activeProperty) {
-    const pendingCount = actionableListProperties.filter(
-      (p) => p.tenantName && p.tenantSubmitted && p.checklist.landlordStatus === 'pending'
-    ).length;
+    const activeMatchCount = properties.filter((p) => Boolean(p.tenantName)).length;
 
     return (
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
@@ -212,7 +198,7 @@ export function LandlordHandoverScreen({
               </p>
             </div>
             <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-mono-tabular font-semibold text-[#0B192C] whitespace-nowrap self-start sm:self-auto">
-              {pendingCount > 0 ? `${pendingCount} Onay Bekliyor` : 'Tüm Tutanaklar Güncel'}
+              {activeMatchCount} Aktif Kiracı
             </span>
           </div>
 
@@ -236,7 +222,6 @@ export function LandlordHandoverScreen({
                 const hasTenant = Boolean(prop.tenantName);
                 const pendingInvite = prop.pendingInvite;
                 const isApproved = prop.checklist.landlordStatus === 'approved';
-                const isObjected = prop.checklist.landlordStatus === 'objected';
 
               let statusText = '';
               let statusColor = '';
@@ -246,18 +231,6 @@ export function LandlordHandoverScreen({
               } else if (!hasTenant) {
                 statusText = 'Henüz Kiracı Bağlı Değil';
                 statusColor = 'text-slate-500';
-              } else if (isApproved) {
-                statusText = 'Teslim Tutanağı Karşılıklı Mühürlendi';
-                statusColor = 'text-emerald-700';
-              } else if (isObjected) {
-                statusText = 'Düzeltme / İtiraz Bildirildi';
-                statusColor = 'text-amber-700';
-              } else if (!prop.tenantSubmitted) {
-                statusText = 'Kiracının teslim tutanağını doldurup göndermesi bekleniyor';
-                statusColor = 'text-amber-700';
-              } else {
-                statusText = 'Eve Giriş Teslim Kaydı Onay Bekliyor';
-                statusColor = 'text-amber-700';
               }
 
               return (
@@ -296,28 +269,18 @@ export function LandlordHandoverScreen({
                             <span className="font-semibold text-slate-700">
                               Kiracı: {prop.tenantName}
                             </span>
-                            {prop.tenantTransparencyPledged === true ? (
-                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-800">
-                                Şeffaflık Taahhüdü Onaylandı
-                              </span>
-                            ) : prop.tenantTransparencyPledged === false ? (
-                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] font-semibold text-amber-950">
-                                Taahhüt Onaylanmadan Devam Edildi
-                              </span>
-                            ) : null}
                           </>
                         )}
                       </h2>
-                      <p className={`mt-1 text-xs sm:text-sm font-medium ${statusColor}`}>
-                        {statusText}
-                      </p>
+                      {!hasTenant && (
+                        <p className={`mt-1 text-xs sm:text-sm font-medium ${statusColor}`}>
+                          {statusText}
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <div className="shrink-0 pl-13 md:pl-0 flex flex-wrap items-center gap-2">
-                    {hasTenant && (
-                      <TenantReferenceButton onClick={() => setReferencePropertyId(prop.id)} />
-                    )}
                     {!hasTenant && pendingInvite ? (
                       <>
                         <button
@@ -362,8 +325,8 @@ export function LandlordHandoverScreen({
                         <span>Raporu Görüntüle</span>
                       </button>
                     ) : !prop.tenantSubmitted ? (
-                      <span className="inline-flex items-center min-h-[42px] px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs sm:text-sm font-semibold text-amber-900 whitespace-nowrap">
-                        ⏳ Kiracının teslim tutanağını doldurup göndermesi bekleniyor
+                      <span className="inline-flex items-center justify-center w-fit min-h-[42px] px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-xs sm:text-sm font-semibold text-slate-600 text-center whitespace-nowrap">
+                        Kiracının tutanağı doldurup onaya göndermesi bekleniyor
                       </span>
                     ) : (
                       <button
@@ -371,7 +334,7 @@ export function LandlordHandoverScreen({
                         onClick={() => handleOpenDetail(prop.id)}
                         className="min-h-[42px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition-colors inline-flex items-center gap-2 whitespace-nowrap"
                       >
-                        <span>Kiracı Tutanağını Görüntüle ve Onayla →</span>
+                        <span>Tutanağı İncele ve Onayla</span>
                       </button>
                     )}
                   </div>
@@ -393,22 +356,9 @@ export function LandlordHandoverScreen({
                       {prop.nickname} ({prop.officialLocation}){' '}
                       <span className="text-slate-400 font-normal">•</span>{' '}
                       <span className="font-semibold text-slate-700">Kiracı: {prop.tenantName}</span>
-                      {prop.tenantTransparencyPledged === true ? (
-                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-800">
-                          Şeffaflık Taahhüdü Onaylandı
-                        </span>
-                      ) : prop.tenantTransparencyPledged === false ? (
-                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] font-semibold text-amber-950">
-                          Taahhüt Onaylanmadan Devam Edildi
-                        </span>
-                      ) : null}
                     </h2>
-                    <p className="mt-1 text-xs sm:text-sm font-medium text-emerald-700">
-                      Teslim Tutanağı Karşılıklı Mühürlendi
-                    </p>
                   </div>
                   <div className="shrink-0 flex flex-wrap items-center gap-2">
-                    <TenantReferenceButton onClick={() => setReferencePropertyId(prop.id)} />
                     <button
                       type="button"
                       onClick={() => handleOpenDetail(prop.id)}
@@ -497,6 +447,7 @@ export function LandlordHandoverScreen({
 
   // AŞAMA 2: RAPOR DETAY EKRANI (A4 Görünümünde Teslim Tutanağı Raporu)
   const { photos, checklist } = activeProperty;
+  const unphotographedRooms = roomsWithoutPhotos(photos);
 
   const handoverDateLabel =
     checklist.sealedAt?.split(' · ')[0] ||
@@ -706,6 +657,11 @@ export function LandlordHandoverScreen({
                   </div>
                 ))}
               </div>
+            )}
+            {unphotographedRooms.length > 0 && (
+              <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
+                Fotoğraf eklenmeyen alanlar: {unphotographedRooms.join(', ')}. Bu alanların denetimi sizin onayınıza bırakıldı.
+              </p>
             )}
           </section>
 

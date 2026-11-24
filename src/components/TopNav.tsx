@@ -1,4 +1,4 @@
-import { ShieldCheck, ArrowLeftRight, Lock, LogOut } from 'lucide-react';
+import { ShieldCheck, Lock, LogOut } from 'lucide-react';
 import { ScreenId, UserRole } from '../types/kiracimkim';
 
 interface TopNavProps {
@@ -6,7 +6,6 @@ interface TopNavProps {
   role: UserRole;
   lockedScreens?: ScreenId[];
   onNavigate: (screen: ScreenId) => void;
-  onSwitchRole: (nextRole: UserRole) => void;
   onLogout?: () => void;
 }
 
@@ -27,7 +26,6 @@ export function TopNav({
   role,
   lockedScreens = [],
   onNavigate,
-  onSwitchRole,
   onLogout,
 }: TopNavProps) {
   const navItems = role === 'landlord' ? LANDLORD_NAV_ITEMS : TENANT_NAV_ITEMS;
@@ -35,10 +33,6 @@ export function TopNav({
     activeScreen === 'login'
       ? 'Güvenli Giriş'
       : navItems.find((item) => item.id === activeScreen)?.mobileTitle ?? 'Kiracımkim';
-
-  const handleToggleRole = () => {
-    onSwitchRole(role === 'tenant' ? 'landlord' : 'tenant');
-  };
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80">
@@ -59,15 +53,6 @@ export function TopNav({
           </span>
 
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={handleToggleRole}
-              aria-label="Rol Değiştir (Kiracı / Ev Sahibi)"
-              className="min-h-[44px] px-2.5 inline-flex items-center gap-1.5 text-xs font-semibold text-[#0B192C] bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
-            >
-              <ArrowLeftRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
-              <span>{role === 'tenant' ? 'Ev Sahibi' : 'Kiracı'}</span>
-            </button>
             {onLogout && (
               <>
                 <button
@@ -145,41 +130,7 @@ export function TopNav({
             })}
           </nav>
 
-          {/* Zone 3: Test Role Switcher (Kiracı / Ev Sahibi) */}
-          <div className="shrink-0 flex items-center gap-2">
-            <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">
-              Rol Değiştir
-            </span>
-            <div
-              className="inline-flex items-center p-1 bg-slate-100 border border-slate-200/80 rounded-xl"
-              role="group"
-              aria-label="Rol Değiştir (Kiracı / Ev Sahibi)"
-            >
-              <button
-                type="button"
-                onClick={() => onSwitchRole('tenant')}
-                aria-pressed={role === 'tenant'}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 ${
-                  role === 'tenant'
-                    ? 'bg-[#0B192C] text-white shadow-sm'
-                    : 'text-slate-600 hover:text-[#0B192C]'
-                }`}
-              >
-                Kiracı
-              </button>
-              <button
-                type="button"
-                onClick={() => onSwitchRole('landlord')}
-                aria-pressed={role === 'landlord'}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 ${
-                  role === 'landlord'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-[#0B192C]'
-                }`}
-              >
-                Ev Sahibi
-              </button>
-            </div>
+          <div className="shrink-0 flex items-center">
             {onLogout && (
               <button
                 type="button"

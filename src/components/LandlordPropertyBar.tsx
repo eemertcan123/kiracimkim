@@ -201,13 +201,7 @@ export function LandlordPropertyBar({
               <option value="all">Tüm Daireler / Kiracılar ({properties.length})</option>
               {properties.map((prop) => {
                 const tenantText = prop.tenantName
-                  ? `Kiracı: ${prop.tenantName}${
-                      prop.tenantTransparencyPledged === true
-                        ? ' • Şeffaflık Taahhüdü Onaylandı'
-                        : prop.tenantTransparencyPledged === false
-                          ? ' • Taahhüt Onaylanmadan Devam Edildi'
-                          : ''
-                    }`
+                  ? `Kiracı: ${prop.tenantName}`
                   : prop.pendingInvite
                   ? `Kiracı Onayı Bekleniyor (${prop.pendingInvite.maskedPhone})`
                   : prop.verificationStatus === 'verified'

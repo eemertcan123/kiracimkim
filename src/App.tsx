@@ -4,6 +4,7 @@ import { TopNav } from './components/TopNav';
 import { MobileTabBar } from './components/MobileTabBar';
 import { AddPropertyPayload, LandlordPropertyBar } from './components/LandlordPropertyBar';
 import { NewApartmentModal } from './components/NewApartmentModal';
+import { TenantGettingStarted } from './components/TenantGettingStarted';
 import { TenantInviteDock } from './components/TenantInviteDock';
 import { TenantStatusBar } from './components/TenantStatusBar';
 import { LoginScreen } from './screens/LoginScreen';
@@ -16,6 +17,7 @@ import { LandlordCandidateScreen } from './screens/landlord/LandlordCandidateScr
 import {
   acceptRentalByInviteCode,
   createRentalMatch,
+  findOrInsertPropertyForInvite,
   clearAppStorage,
   deleteProperty,
   insertProperty,
@@ -31,6 +33,7 @@ import {
   registerAccount,
   signInAccount,
   signOutAccount,
+  TENANT_GUIDE_STORAGE_PREFIX,
   updatePledge,
   type PendingMatch,
   type TenantHistory,
@@ -128,15 +131,18 @@ export default function App() {
 
   const [focusedReceiptId, setFocusedReceiptId] = useState<string | null>(null);
   const [focusedCandidateCode, setFocusedCandidateCode] = useState<string | null>(null);
-  const [tenantInviteStatus, setTenantInviteStatus] = useState<'pending' | 'active'>('pending');
+  const [activeTenantRentalId, setActiveTenantRentalId] = useState<string | null>(null);
+  const tenantInviteStatus = activeTenantRentalId ? 'active' : 'pending';
   const [tenantMatchDismissed, setTenantMatchDismissed] = useState(false);
   const [transparentEntryPledged, setTransparentEntryPledged] = useState(false);
   const [pledgePromptCode, setPledgePromptCode] = useState<string | null>(null);
   const [pledgeSaving, setPledgeSaving] = useState(false);
-  const [tenantHistory, setTenantHistory] = useState<TenantHistory>({
-    approvedPaymentCount: 0,
-    references: [],
-  });
+  const [tenantHistory, setTenantHistory] = useState<TenantHistory | null>(null);
+  const [tenantHistoryRefreshFailed, setTenantHistoryRefreshFailed] = useState(false);
+  const [tenantGuideComplete, setTenantGuideComplete] = useState(false);
+  const [tenantGuideReopened, setTenantGuideReopened] = useState(false);
+  const [tenantFirstName, setTenantFirstName] = useState<string>();
+  const mainRef = useRef<HTMLElement>(null);
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message);
@@ -157,10 +163,14 @@ export default function App() {
     setSelectedPropertyId('empty-demo');
     setFocusedReceiptId(null);
     setFocusedCandidateCode(null);
-    setTenantInviteStatus('pending');
+    setActiveTenantRentalId(null);
     setTenantMatchDismissed(false);
     setTransparentEntryPledged(false);
-    setTenantHistory({ approvedPaymentCount: 0, references: [] });
+    setTenantHistory(null);
+    setTenantHistoryRefreshFailed(false);
+    setTenantGuideComplete(false);
+    setTenantGuideReopened(false);
+    setTenantFirstName(undefined);
     setAddPropertyModalOpen(false);
     setNewApartmentOpen(false);
     announcedHandoverRef.current.clear();
@@ -172,18 +182,31 @@ export default function App() {
       const workspace = await loadWorkspace(userId);
       if (activeUserRef.current !== userId) return null;
       const viewRole = explicitRole ?? readActiveRole() ?? workspace.session.role;
+      const profileName = workspace.profile.full_name?.trim();
       writeActiveRole(viewRole);
       setSession({ ...workspace.session, role: viewRole });
+      setTenantFirstName(
+        profileName && profileName !== 'Kullanıcı' && !profileName.includes('@')
+          ? profileName.split(/\s+/)[0]
+          : undefined
+      );
       setOwnedProperties(workspace.ownedProperties);
       setTenantProperties(workspace.tenantProperties);
       setTransparentEntryPledged(workspace.transparentEntryPledged);
       setTenantHistory(workspace.tenantHistory);
-      setTenantInviteStatus(workspace.tenantInviteStatus);
+      setTenantHistoryRefreshFailed(false);
+      setActiveTenantRentalId(workspace.activeRentalId);
       setTenantMatchDismissed(workspace.tenantMatchDismissed);
       setPendingMatch(workspace.pendingMatch);
       setCandidates(workspace.candidates);
       setSelectedPropertyId(workspace.ownedProperties.length === 0 ? 'empty-demo' : 'all');
       if (navigate) {
+        try {
+          setTenantGuideComplete(localStorage.getItem(TENANT_GUIDE_STORAGE_PREFIX + userId) === 'done');
+        } catch {
+          setTenantGuideComplete(false);
+        }
+        setTenantGuideReopened(false);
         setActiveScreen(viewRole === 'landlord' ? 'landlord-candidates' : 'trust-card');
       }
       setAuthReady(true);
@@ -202,22 +225,21 @@ export default function App() {
   }, [showToast]);
 
   const syncRentals = useCallback(async (userId: string) => {
-    const workspace = await loadWorkspace(userId);
-    if (activeUserRef.current !== userId) return;
+    const workspace = await loadWorkspace(userId).catch(() => {
+      if (activeUserRef.current === userId) setTenantHistoryRefreshFailed(true);
+      return null;
+    });
+    if (!workspace || activeUserRef.current !== userId) return;
     setOwnedProperties(workspace.ownedProperties);
     setCandidates(workspace.candidates);
     setPendingMatch(workspace.pendingMatch);
-    setTenantInviteStatus(workspace.tenantInviteStatus);
+    setActiveTenantRentalId(workspace.activeRentalId);
     setTenantMatchDismissed(workspace.tenantMatchDismissed);
     setTenantHistory(workspace.tenantHistory);
-    setSession((prev) => ({
-      ...prev,
-      activeTenantPropertyId:
-        workspace.session.activeTenantPropertyId || prev.activeTenantPropertyId,
-    }));
+    setTenantHistoryRefreshFailed(false);
     setTenantProperties((prev) =>
       workspace.tenantProperties.map((next) => {
-        const current = prev.find((item) => item.id === next.id);
+        const current = prev.find((item) => item.rentalId === next.rentalId);
         const landlordApproved =
           current?.checklist.landlordStatus === 'approved' ||
           next.checklist.landlordStatus === 'approved';
@@ -228,23 +250,29 @@ export default function App() {
         ) {
           announceHandoverApproval(next.id);
         }
-        return current
-          ? {
-              ...current,
-              nickname: next.nickname,
-              officialLocation: next.officialLocation,
-              reference: next.reference ?? current.reference,
-              receipts: next.receipts,
-              rentalId: next.rentalId,
-              landlordUserId: next.landlordUserId,
-              checklist: landlordApproved
-                ? { ...current.checklist, landlordStatus: 'approved' }
-                : current.checklist,
-            }
-          : next;
+        if (!current) return next;
+        const receivedSubmission = !current.tenantSubmitted && next.tenantSubmitted;
+        const handover = receivedSubmission && !current.checklist.sealed ? next : current;
+        return {
+          ...handover,
+          nickname: next.nickname,
+          officialLocation: next.officialLocation,
+          reference: next.reference ?? current.reference,
+          receipts: next.receipts,
+          tenantSubmitted: receivedSubmission ? true : current.tenantSubmitted,
+          landlordUserId: next.landlordUserId,
+          checklist: landlordApproved
+            ? { ...handover.checklist, landlordStatus: 'approved' }
+            : handover.checklist,
+        };
       })
     );
   }, [announceHandoverApproval]);
+
+  const refreshTenantInvites = useCallback(() => {
+    if (!session.userId) return Promise.resolve();
+    return syncRentals(session.userId);
+  }, [session.userId, syncRentals]);
 
   useEffect(() => {
     if (!session.authenticated || !session.userId) return;
@@ -317,6 +345,8 @@ export default function App() {
       window.setTimeout(() => {
         if (!active) return;
         void applyWorkspace(data.session.user.id, true).catch(() => {
+          if (!active) return;
+          showToast('Panel bilgileri yüklenemedi. Tekrar giriş yapmayı deneyin.');
           setAuthReady(true);
         });
       }, 0);
@@ -324,7 +354,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [applyWorkspace]);
+  }, [applyWorkspace, showToast]);
 
   const formatTimestamp = (useBullet = false) => {
     const now = new Date();
@@ -337,9 +367,9 @@ export default function App() {
     )}:${String(now.getMinutes()).padStart(2, '0')}`;
   };
 
+  const selectedTenantRentalId = activeTenantRentalId ?? pendingMatch?.rentalId;
   const tenantProperty =
-    properties.find((p) => p.id === session.activeTenantPropertyId) ??
-    properties[0] ??
+    (selectedTenantRentalId && tenantProperties.find((property) => property.rentalId === selectedTenantRentalId)) ||
     EMPTY_TENANT_PROPERTY;
 
   const handleNavigate = (screen: ScreenId) => {
@@ -361,26 +391,8 @@ export default function App() {
       }
       return;
     }
+    if (screen !== 'trust-card') setTenantGuideReopened(false);
     setActiveScreen(screen);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleSwitchRole = (nextRole: UserRole) => {
-    if (!session.authenticated) {
-      showToast('Rol görünümü giriş yaptıktan sonra kullanılabilir.');
-      return;
-    }
-    if (nextRole === session.role) return;
-    writeActiveRole(nextRole);
-    setSession((prev) => ({ ...prev, role: nextRole }));
-
-    if (nextRole === 'landlord') {
-      setActiveScreen('landlord-candidates');
-      showToast('Ev Sahibi Paneli görünümüne geçildi.');
-    } else {
-      setActiveScreen('trust-card');
-      showToast('Kiracı Paneli görünümüne geçildi.');
-    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -512,19 +524,25 @@ export default function App() {
 
   const handleCreatePropertyForInvite = async (title: string, district: string) => {
     if (!session.userId) throw new Error('Daire eklemek için giriş yapın.');
-    const created = await insertProperty({
-      landlordId: session.userId,
-      title,
-      district,
-    });
-    setOwnedProperties((prev) => [...prev, created]);
-    if (selectedPropertyId === 'empty-demo') setSelectedPropertyId('all');
-    return created.id;
+    try {
+      const property = await findOrInsertPropertyForInvite({
+        landlordId: session.userId,
+        title,
+        district,
+      });
+      setOwnedProperties((prev) =>
+        prev.some((entry) => entry.id === property.id) ? prev : [...prev, property]
+      );
+      if (selectedPropertyId === 'empty-demo') setSelectedPropertyId('all');
+      return property.id;
+    } catch (error) {
+      throw new Error(authErrorMessage(error));
+    }
   };
 
   const handleSendKmkInvite = async (propertyId: string, carnetCode: string) => {
     if (!session.userId) {
-      throw new Error('Davet göndermek için giriş yapın.');
+      throw new Error('Davet kodu oluşturmak için giriş yapın.');
     }
     let inviteCode = '';
     try {
@@ -552,11 +570,7 @@ export default function App() {
           : prop
       )
     );
-    showToast(
-      inviteCode
-        ? `Davet gönderildi. Kiracı kodu: ${inviteCode}`
-        : 'Davet kiracının paneline iletildi, onay bekleniyor.'
-    );
+    showToast('Davet kodu oluşturuldu.');
     return inviteCode;
   };
 
@@ -577,7 +591,7 @@ export default function App() {
   const handleSubmitInviteCode = (rawCode: string) => {
     if (!session.userId) return;
     const noHistory =
-      tenantHistory.approvedPaymentCount === 0 && tenantHistory.references.length === 0;
+      tenantHistory?.approvedPaymentCount === 0 && tenantHistory.references.length === 0;
     if (noHistory) {
       setPledgePromptCode(rawCode.trim());
       return;
@@ -754,12 +768,10 @@ export default function App() {
     }
     const ts = formatTimestamp(false);
     const rentalId = tenantProperty.rentalId;
-    const propertyId = tenantProperty.id;
     const seal = (prop: LandlordProperty): LandlordProperty => {
-      if (prop.id !== propertyId) return prop;
+      if (prop.rentalId !== rentalId) return prop;
       const next = {
         ...prop,
-        tenantSubmitted: true,
         checklist: {
           ...prop.checklist,
           sealed: true,
@@ -774,14 +786,14 @@ export default function App() {
     setOwnedProperties((prev) => prev.map(seal));
     void submitTenantHandover(rentalId, handoverReportFromProperty(tenantProperty))
       .then(() => {
+        const markSubmitted = (prop: LandlordProperty): LandlordProperty =>
+          prop.rentalId === rentalId ? { ...prop, tenantSubmitted: true } : prop;
+        setTenantProperties((prev) => prev.map(markSubmitted));
+        setOwnedProperties((prev) => prev.map(markSubmitted));
         showToast('Teslim tutanağı zaman damgasıyla mühürlendi ve Ev Sahibi onayına sunuldu.');
       })
       .catch((error: unknown) => {
         console.error('Teslim tutanağı gönderilemedi:', error);
-        const revert = (prop: LandlordProperty): LandlordProperty =>
-          prop.id === propertyId ? { ...prop, tenantSubmitted: false } : prop;
-        setTenantProperties((prev) => prev.map(revert));
-        setOwnedProperties((prev) => prev.map(revert));
         showToast(error instanceof Error ? error.message : 'Teslim tutanağı gönderilemedi.');
       });
   };
@@ -956,6 +968,26 @@ export default function App() {
     session.role === 'tenant' && tenantInviteStatus === 'pending'
       ? ['handover', 'receipts']
       : [];
+  const isTenantTrustCard = session.authenticated && session.role === 'tenant' && activeScreen === 'trust-card';
+  const showTenantGuide = isTenantTrustCard && (
+    tenantGuideReopened || (!tenantGuideComplete && !activeTenantRentalId && !pendingMatch)
+  );
+
+  const openTenantGuide = () => {
+    setTenantGuideReopened(true);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
+  const completeTenantGuide = () => {
+    setTenantGuideComplete(true);
+    setTenantGuideReopened(false);
+    try {
+      localStorage.setItem(TENANT_GUIDE_STORAGE_PREFIX + session.userId, 'done');
+    } catch {
+      // Completion still applies during this session.
+    }
+    requestAnimationFrame(() => mainRef.current?.focus());
+  };
 
   const handleResetTenantDemo = () => {
     if (!session.userId) return;
@@ -1047,7 +1079,7 @@ export default function App() {
       await applyWorkspace(result.profile.id, true, input.role);
       showToast(
         input.role === 'tenant'
-          ? `Kayıt tamamlandı. Karne kodunuz: ${result.profile.carnet_code}`
+          ? 'Kiracı hesabınız oluşturuldu.'
           : 'Ev sahibi hesabınız oluşturuldu.'
       );
     } catch (error) {
@@ -1071,7 +1103,6 @@ export default function App() {
         role={session.role}
         lockedScreens={lockedTenantScreens}
         onNavigate={handleNavigate}
-        onSwitchRole={handleSwitchRole}
         onLogout={session.authenticated ? handleLogout : undefined}
       />
 
@@ -1082,12 +1113,12 @@ export default function App() {
         />
       )}
 
-      {session.role === 'tenant' && activeScreen !== 'login' && (
+      {session.role === 'tenant' && activeScreen !== 'login' && activeScreen !== 'trust-card' && (
         <TenantStatusBar
           status={tenantInviteStatus}
           matchDismissed={tenantMatchDismissed}
           hasVerifiedHistory={
-            tenantHistory.approvedPaymentCount > 0 || tenantHistory.references.length > 0
+            Boolean(tenantHistory && (tenantHistory.approvedPaymentCount > 0 || tenantHistory.references.length > 0))
           }
           officialLocation={tenantProperty.officialLocation}
           landlordName={tenantLandlordName}
@@ -1112,7 +1143,7 @@ export default function App() {
         />
       )}
 
-      <main className="flex-1 pb-28 lg:pb-12">
+      <main ref={mainRef} tabIndex={-1} className={showTenantGuide ? 'flex-1' : 'flex-1 pb-28 lg:pb-12'}>
 
         {(!session.authenticated || activeScreen === 'login') && (
           <LoginScreen
@@ -1152,24 +1183,32 @@ export default function App() {
           />
         )}
 
-        {session.authenticated && activeScreen === 'trust-card' && (
-          <TrustCardScreen
-            session={session}
-            checklist={tenantProperty.checklist}
-            approvedPaymentCount={tenantHistory.approvedPaymentCount}
-            references={tenantHistory.references}
-            pendingMatch={
-              tenantInviteStatus === 'pending' && pendingMatch
-                ? {
-                    landlordName: pendingMatch.landlordName,
-                    propertyTitle: pendingMatch.propertyTitle,
-                  }
-                : null
-            }
-            hasActiveRental={tenantInviteStatus === 'active'}
-            onSubmitInviteCode={handleSubmitInviteCode}
-            onNotify={showToast}
+        {showTenantGuide && (
+          <TenantGettingStarted
+            key={session.userId}
+            firstName={tenantFirstName}
+            onComplete={completeTenantGuide}
           />
+        )}
+
+        {isTenantTrustCard && (!showTenantGuide || tenantGuideReopened) && (
+          <div hidden={showTenantGuide}>
+            <TrustCardScreen
+              key={session.userId}
+              session={session}
+              activeRental={activeTenantRentalId && tenantProperty.rentalId ? tenantProperty : null}
+              hasActiveRental={Boolean(activeTenantRentalId)}
+              history={tenantHistory}
+              historyRefreshFailed={tenantHistoryRefreshFailed}
+              pendingMatch={pendingMatch}
+              onSubmitInviteCode={handleSubmitInviteCode}
+              onNavigate={handleNavigate}
+              onNotify={showToast}
+              onOpenGuide={openTenantGuide}
+              onRefreshInvites={refreshTenantInvites}
+              transparencyPledged={transparentEntryPledged}
+            />
+          </div>
         )}
 
         {isLandlordScreen &&
@@ -1230,8 +1269,9 @@ export default function App() {
               />
             )}
 
-            {activeScreen === 'landlord-candidates' && (
+            {activeScreen === 'landlord-candidates' && session.authenticated && session.role === 'landlord' && (
               <LandlordCandidateScreen
+                key={session.userId}
                 landlordId={session.userId}
                 properties={properties}
                 selectedPropertyId={selectedPropertyId}
@@ -1253,7 +1293,7 @@ export default function App() {
       </main>
 
       {/* Clean Quiet Footer */}
-      <footer className="border-t border-slate-200/80 bg-white py-4 pb-20 lg:pb-5 no-print">
+      <footer hidden={showTenantGuide} className="border-t border-slate-200/80 bg-white py-4 pb-20 lg:pb-5 no-print">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
           <span>Kiracımkim · Güvenli Kira İlişkisi ve Dijital İtibar Platformu</span>
           <div className="flex items-center gap-4">
@@ -1279,12 +1319,14 @@ export default function App() {
         onSave={handleCreateApartment}
       />
 
-      <MobileTabBar
-        activeScreen={activeScreen}
-        role={session.role}
-        lockedScreens={lockedTenantScreens}
-        onNavigate={handleNavigate}
-      />
+      {!showTenantGuide && (
+        <MobileTabBar
+          activeScreen={activeScreen}
+          role={session.role}
+          lockedScreens={lockedTenantScreens}
+          onNavigate={handleNavigate}
+        />
+      )}
 
       {/* Live Feedback Toast */}
       {pledgePromptCode && (
@@ -1329,7 +1371,7 @@ export default function App() {
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-20 lg:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-sm z-50 bg-[#0B192C] text-white px-4 py-3 rounded-2xl shadow-lg border border-white/10 flex items-center gap-3 text-xs sm:text-sm no-print"
+          className={`fixed left-4 right-4 sm:left-auto sm:right-6 sm:max-w-sm z-50 bg-[#0B192C] text-white px-4 py-3 rounded-2xl shadow-lg border border-white/10 flex items-center gap-3 text-xs sm:text-sm no-print ${showTenantGuide ? 'top-14 lg:top-[4.5rem]' : 'bottom-20 lg:bottom-6'}`}
         >
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" aria-hidden="true" />
           <span className="leading-snug">{toastMessage}</span>

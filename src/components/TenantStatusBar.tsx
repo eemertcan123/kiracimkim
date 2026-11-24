@@ -41,8 +41,7 @@ export function TenantStatusBar({
               </p>
               <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed">
                 Ev sahibiyle eşleştiğinizde teslim tutanağınızı oluşturabilir ve kira ödeme
-                geçmişinizi kaydetmeye başlayabilirsiniz. Şimdilik Kiracı Pasaportunuzu paylaşarak
-                güven profilinizi ev sahiplerine sunabilirsiniz.
+                geçmişinizi kaydetmeye başlayabilirsiniz. Bu sırada Güven Karnenizi ev sahipleriyle paylaşabilirsiniz.
               </p>
             </div>
           ) : matchDismissed ? (

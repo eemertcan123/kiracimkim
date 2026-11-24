@@ -8,7 +8,7 @@ export type ScreenId = TenantScreenId | LandlordScreenId;
 
 export type UserRole = 'tenant' | 'landlord';
 
-export type RoomId = 'salon' | 'mutfak' | 'yatak-odasi' | 'banyo' | 'sayaclar';
+export type RoomId = string;
 
 export interface HandoverPhoto {
   id: string;

@@ -17,15 +17,9 @@ import {
   ImagePlus,
   Gauge,
   KeyRound,
-  Lock,
 } from 'lucide-react';
 import { ResilientImage } from '../components/ResilientImage';
-import {
-  LIVING_ROOMS,
-  handoverSubmitError,
-  missingMeterLabels,
-  missingRoomLabels,
-} from '../lib/handoverSteps';
+import { LIVING_ROOMS, roomsWithoutPhotos } from '../lib/handoverSteps';
 import { HandoverChecklistState, HandoverPhoto, RoomId, ScreenId } from '../types/kiracimkim';
 
 interface HandoverScreenProps {
@@ -59,10 +53,26 @@ function writeStepToUrl(nextStep: WizardStep) {
   window.history.replaceState({}, '', url);
 }
 
-function allowedStep(photos: HandoverPhoto[], checklist: HandoverChecklistState): WizardStep {
-  if (missingRoomLabels(photos).length > 0) return 1;
-  if (missingMeterLabels(checklist).length > 0) return 2;
-  return 3;
+function photoCountLabel(count: number) {
+  if (count <= 0) return 'Henüz fotoğraf yok';
+  return `${count} fotoğraf eklendi`;
+}
+
+interface ExtraArea {
+  id: string;
+  label: string;
+  guidance: string;
+}
+
+function areaIdFromLabel(label: string) {
+  const slug = label
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return slug ? `alan-${slug}` : `alan-${Date.now()}`;
 }
 
 export function HandoverScreen({
@@ -78,11 +88,11 @@ export function HandoverScreen({
   onNavigate,
   onNotify,
 }: HandoverScreenProps) {
-  const [step, setStep] = useState<WizardStep>(() =>
-    Math.min(readRequestedStep(), allowedStep(photos, checklist)) as WizardStep
-  );
-  const [meterHint, setMeterHint] = useState(false);
+  const [step, setStep] = useState<WizardStep>(readRequestedStep);
   const [selectedRoom, setSelectedRoom] = useState<RoomId>('salon');
+  const [customAreas, setCustomAreas] = useState<ExtraArea[]>([]);
+  const [areaDraftOpen, setAreaDraftOpen] = useState(false);
+  const [areaDraft, setAreaDraft] = useState('');
   const [openRoomId, setOpenRoomId] = useState<RoomId | null>(null);
   const [condition, setCondition] = useState<'hasarsiz' | 'kusurlu'>('hasarsiz');
   const [noteInput, setNoteInput] = useState('');
@@ -102,10 +112,6 @@ export function HandoverScreen({
   const waterPhotoRef = useRef<HTMLInputElement | null>(null);
   const gasPhotoRef = useRef<HTMLInputElement | null>(null);
 
-  const activeRoomDef =
-    LIVING_ROOMS.find((r) => r.id === selectedRoom) ?? LIVING_ROOMS[0];
-  const displayedPhotos = photos.filter((p) => p.roomId === selectedRoom);
-
   const openRoom = (roomId: RoomId) => {
     setSelectedRoom(roomId);
     setOpenRoomId(roomId);
@@ -121,73 +127,21 @@ export function HandoverScreen({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const missingRooms = missingRoomLabels(photos);
-  const missingMeters = missingMeterLabels(checklist);
-
-  const stepBlockReason = (nextStep: WizardStep): string | null => {
-    if (nextStep <= 1) return null;
-    if (missingRooms.length > 0) {
-      return `Önce oda fotoğraflarını tamamlamanız gerekiyor: ${missingRooms.join(', ')}.`;
-    }
-    if (nextStep >= 3 && missingMeters.length > 0) {
-      return `Sayaç ve anahtar bilgilerini tamamlayın: ${missingMeters.join(', ')}.`;
-    }
-    return null;
-  };
-
   const goToStep = (nextStep: WizardStep) => {
-    const reason = stepBlockReason(nextStep);
-    if (reason) {
-      if (nextStep >= 3) setMeterHint(true);
-      onNotify(reason);
-      return;
-    }
     setStep(nextStep);
     writeStepToUrl(nextStep);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   useEffect(() => {
-    const requested = readRequestedStep();
-    if (requested === step) {
-      writeStepToUrl(step);
-      return;
-    }
-    const reason = stepBlockReason(requested);
-    if (reason) {
-      writeStepToUrl(step);
-      onNotify(reason);
-      return;
-    }
-    setStep(requested);
+    writeStepToUrl(readRequestedStep());
   }, []);
 
   useEffect(() => {
-    const onPop = () => {
-      const requested = readRequestedStep();
-      const reason = stepBlockReason(requested);
-      if (reason) {
-        writeStepToUrl(step);
-        onNotify(reason);
-        return;
-      }
-      setStep(requested);
-    };
+    const onPop = () => setStep(readRequestedStep());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  });
-
-  useEffect(() => {
-    const furthest = allowedStep(photos, checklist);
-    if (step > furthest) {
-      setStep(furthest);
-      writeStepToUrl(furthest);
-      onNotify(
-        handoverSubmitError(photos, checklist) ??
-          'Önce oda fotoğraflarını tamamlamanız gerekiyor.'
-      );
-    }
-  }, [checklist, photos, step]);
+  }, []);
 
   const stopCameraStream = () => {
     if (streamRef.current) {
@@ -408,17 +362,52 @@ export function HandoverScreen({
   };
 
   const roomPhotoCount = (roomId: RoomId) => photos.filter((p) => p.roomId === roomId).length;
-  const roomIsComplete = (roomId: RoomId, requiredCount: number) =>
-    roomPhotoCount(roomId) >= requiredCount;
-  const finishedRoomCount = LIVING_ROOMS.filter((room) =>
-    roomIsComplete(room.id, room.requiredCount)
-  ).length;
+  const extraAreas = new Map<string, ExtraArea>();
+  for (const area of customAreas) extraAreas.set(area.id, area);
+  for (const photo of photos) {
+    if (photo.roomId === 'sayaclar' || LIVING_ROOMS.some((room) => room.id === photo.roomId)) continue;
+    if (!extraAreas.has(photo.roomId)) {
+      extraAreas.set(photo.roomId, {
+        id: photo.roomId,
+        label: photo.roomLabel,
+        guidance: 'Bu alana ait fotoğrafları ekleyin.',
+      });
+    }
+  }
+  const areas: ExtraArea[] = [
+    ...LIVING_ROOMS.map((room) => ({
+      id: room.id,
+      label: room.label,
+      guidance: room.guidance,
+    })),
+    ...extraAreas.values(),
+  ];
+  const activeRoomDef = areas.find((room) => room.id === selectedRoom) ?? areas[0];
+  const displayedPhotos = photos.filter((p) => p.roomId === selectedRoom);
+  const unphotographedRooms = roomsWithoutPhotos(photos);
   const defectCount = photos.filter((p) => p.condition === 'kusurlu').length;
-  const meterPhotosCount = [
-    checklist.electricMeterPhoto,
-    checklist.waterMeterPhoto,
-    checklist.gasMeterPhoto,
-  ].filter(Boolean).length;
+
+  const addArea = (event: React.FormEvent) => {
+    event.preventDefault();
+    const label = areaDraft.trim();
+    if (!label) return;
+    const id = areaIdFromLabel(label);
+    const duplicate = areas.some(
+      (area) =>
+        area.id === id ||
+        area.label.toLocaleLowerCase('tr-TR') === label.toLocaleLowerCase('tr-TR')
+    );
+    if (duplicate) {
+      onNotify('Bu alan zaten listede.');
+      return;
+    }
+    setCustomAreas((current) => [
+      ...current,
+      { id, label, guidance: 'Bu alana ait fotoğrafları ekleyin.' },
+    ]);
+    setAreaDraft('');
+    setAreaDraftOpen(false);
+  };
 
   const wizardSteps: { id: WizardStep; title: string }[] = [
     { id: 1, title: '1. Oda Fotoğrafları' },
@@ -444,12 +433,7 @@ export function HandoverScreen({
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5">
           {wizardSteps.map((ws, index) => {
             const isCurrent = step === ws.id;
-            const isLocked = stepBlockReason(ws.id) !== null;
-            const isDone =
-              !isCurrent &&
-              ((ws.id === 1 && missingRooms.length === 0) ||
-                (ws.id === 2 && missingRooms.length === 0 && missingMeters.length === 0) ||
-                (ws.id === 3 && checklist.sealed));
+            const isDone = !isCurrent && (ws.id < step || (ws.id === 3 && checklist.sealed));
 
             return (
               <div key={ws.id} className="flex items-center gap-2 flex-1 min-w-0">
@@ -457,20 +441,14 @@ export function HandoverScreen({
                   type="button"
                   onClick={() => goToStep(ws.id)}
                   aria-current={isCurrent ? 'step' : undefined}
-                  aria-disabled={isLocked}
                   className={`w-full min-h-[46px] px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center gap-2 text-center ${
                     isCurrent
                       ? 'bg-[#0B192C] border-[#0B192C] text-white'
                       : isDone
                       ? 'bg-emerald-50 border-emerald-600 text-emerald-800 hover:bg-emerald-100/70'
-                      : isLocked
-                      ? 'bg-slate-50 border-slate-200 text-slate-400'
                       : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                   }`}
                 >
-                  {isLocked && (
-                    <Lock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                  )}
                   {isDone && !isCurrent && (
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
                   )}
@@ -496,17 +474,16 @@ export function HandoverScreen({
               Odaları fotoğraflayın
             </h2>
             <p className="mt-1 text-sm text-slate-600 leading-relaxed">
-              Bir oda seçin, fotoğraflarını ekleyin ve tamamlayın. Sıradaki odayı siz seçersiniz.
+              Fotoğraf eklemek istediğiniz alanı seçin. Tüm odaları doldurmanız gerekmez; boş kalan alanları ev sahibi onayda inceler.
             </p>
             <p className="mt-2 text-xs font-semibold text-slate-500">
-              {finishedRoomCount}/{LIVING_ROOMS.length} oda tamamlandı
+              {photoCountLabel(photos.length)}
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {LIVING_ROOMS.map((room) => {
+            {areas.map((room) => {
               const count = roomPhotoCount(room.id);
-              const done = roomIsComplete(room.id, room.requiredCount);
               return (
                 <button
                   key={room.id}
@@ -514,29 +491,59 @@ export function HandoverScreen({
                   onClick={() => openRoom(room.id)}
                   className="text-left bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 hover:border-slate-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-base font-display font-bold text-[#0B192C]">{room.label}</h3>
-                    <span
-                      className={`shrink-0 inline-flex items-center gap-1 text-xs font-semibold ${
-                        done ? 'text-emerald-700' : 'text-slate-500'
-                      }`}
-                    >
-                      {done && <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />}
-                      {done ? 'Tamamlandı' : 'Fotoğraf bekleniyor'}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-slate-600 font-mono-tabular">
-                    {count}/{room.requiredCount} fotoğraf
+                  <h3 className="text-base font-display font-bold text-[#0B192C]">{room.label}</h3>
+                  <p
+                    className={`mt-2 inline-flex items-center gap-1.5 text-sm font-medium ${
+                      count > 0 ? 'text-emerald-700' : 'text-slate-500'
+                    }`}
+                  >
+                    {count > 0 && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />}
+                    {photoCountLabel(count)}
                   </p>
                 </button>
               );
             })}
           </div>
 
-          {missingRooms.length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-              <p>Eksik odalar: {missingRooms.join(', ')}. Karttan açıp fotoğrafları tamamlayın.</p>
-            </div>
+          {areaDraftOpen ? (
+            <form onSubmit={addArea} className="flex flex-col sm:flex-row gap-2">
+              <label htmlFor="extra-area-name" className="sr-only">
+                Alan adı
+              </label>
+              <input
+                id="extra-area-name"
+                type="text"
+                value={areaDraft}
+                onChange={(event) => setAreaDraft(event.target.value)}
+                placeholder="Örn. Balkon, Antre, Kombi/Demirbaş"
+                className="min-h-[44px] flex-1 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-[#0B192C] focus:outline-none focus:ring-2 focus:ring-emerald-600"
+              />
+              <button
+                type="submit"
+                className="min-h-[44px] rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                Ekle
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAreaDraft('');
+                  setAreaDraftOpen(false);
+                }}
+                className="min-h-[44px] rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Vazgeç
+              </button>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAreaDraftOpen(true)}
+              className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-4 text-sm font-semibold text-[#0B192C] hover:bg-slate-50"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Alan Ekle
+            </button>
           )}
 
           <div className="pt-1 flex justify-end">
@@ -563,8 +570,8 @@ export function HandoverScreen({
               <ArrowLeft className="w-4 h-4 shrink-0" aria-hidden="true" />
               Oda listesi
             </button>
-            <span className="text-xs font-mono-tabular text-slate-500">
-              {roomPhotoCount(activeRoomDef.id)}/{activeRoomDef.requiredCount} fotoğraf
+            <span className="text-xs font-medium text-slate-500">
+              {photoCountLabel(roomPhotoCount(activeRoomDef.id))}
             </span>
           </div>
 
@@ -935,8 +942,7 @@ export function HandoverScreen({
                   Sayaç Endeksleri ve Anahtar Adedi
                 </h2>
                 <p className="mt-1 text-xs sm:text-sm text-slate-500">
-                  Taşınma anındaki sayaç değerlerini girin, sayaç fotoğrafını ekleyin ve teslim
-                  aldığınız anahtar sayısını onaylayın.
+                  Yalnızca evde bulunan sayaçları ve anahtarları girin. Olmayan alanları boş bırakıp özete geçebilirsiniz.
                 </p>
               </div>
             </div>
@@ -948,7 +954,7 @@ export function HandoverScreen({
                   htmlFor="meter-electric"
                   className="block text-xs font-semibold text-[#0B192C] mb-1.5"
                 >
-                  Elektrik Sayacı Endeksi (kWh)
+                  Elektrik Sayacı Endeksi (kWh, opsiyonel)
                 </label>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
                   <input
@@ -995,7 +1001,7 @@ export function HandoverScreen({
                   htmlFor="meter-water"
                   className="block text-xs font-semibold text-[#0B192C] mb-1.5"
                 >
-                  Su Sayacı Endeksi (m³)
+                  Su Sayacı Endeksi (m³, opsiyonel)
                 </label>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
                   <input
@@ -1038,7 +1044,7 @@ export function HandoverScreen({
                   htmlFor="meter-gas"
                   className="block text-xs font-semibold text-[#0B192C] mb-1.5"
                 >
-                  Doğalgaz Sayacı Endeksi (m³)
+                  Doğalgaz Sayacı Endeksi (m³, opsiyonel)
                 </label>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
                   <input
@@ -1084,7 +1090,7 @@ export function HandoverScreen({
                 <div className="flex items-center gap-2.5">
                   <KeyRound className="w-5 h-5 text-emerald-600 shrink-0" aria-hidden="true" />
                   <span className="text-sm font-semibold text-[#0B192C]">
-                    Teslim Alınan Anahtar Adedi
+                    Teslim Alınan Anahtar Adedi (opsiyonel)
                   </span>
                 </div>
                 <div className="flex items-center gap-2.5">
@@ -1092,7 +1098,7 @@ export function HandoverScreen({
                     type="button"
                     aria-label="Anahtar sayısını azalt"
                     onClick={() =>
-                      onUpdateChecklist({ keysCount: Math.max(1, checklist.keysCount - 1) })
+                      onUpdateChecklist({ keysCount: Math.max(0, checklist.keysCount - 1) })
                     }
                     className="min-h-[44px] min-w-[44px] rounded-xl border border-slate-200 flex items-center justify-center text-[#0B192C] hover:bg-slate-50"
                   >
@@ -1126,17 +1132,9 @@ export function HandoverScreen({
             </button>
 
             <div className="flex flex-col items-stretch sm:items-end gap-2">
-              {meterHint && missingMeters.length > 0 && (
-                <p className="text-sm text-slate-600 sm:text-right">
-                  Eksik alanlar: {missingMeters.join(', ')}.
-                </p>
-              )}
               <button
                 type="button"
-                onClick={() => {
-                  setMeterHint(true);
-                  goToStep(3);
-                }}
+                onClick={() => goToStep(3)}
                 className="min-h-[48px] px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl transition-colors inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-600"
               >
                 <span>Sonraki Adım: Özet ve Karşılıklı Onay</span>
@@ -1251,6 +1249,11 @@ export function HandoverScreen({
                     ))}
                   </div>
                 )}
+                {unphotographedRooms.length > 0 && (
+                  <p className="mt-3 text-xs leading-relaxed text-slate-500">
+                    Fotoğraf eklenmeyen alanlar ({unphotographedRooms.join(', ')}) ev sahibi onayında incelenir.
+                  </p>
+                )}
               </div>
 
               {/* Section 2: Meter Readings & Keys */}
@@ -1272,28 +1275,28 @@ export function HandoverScreen({
                   <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3">
                     <dt className="text-slate-500">Elektrik Sayacı</dt>
                     <dd className="mt-1 font-mono-tabular font-bold text-[#0B192C] text-sm">
-                      {checklist.electricMeterNo}
+                      {checklist.electricMeterNo.trim() || 'Girilmedi'}
                     </dd>
-                    <span className="mt-0.5 block text-[11px] text-emerald-700">
-                      {checklist.electricMeterPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf eksik'}
+                    <span className={`mt-0.5 block text-[11px] ${checklist.electricMeterPhoto ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      {checklist.electricMeterPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf eklenmedi'}
                     </span>
                   </div>
                   <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3">
                     <dt className="text-slate-500">Su Sayacı</dt>
                     <dd className="mt-1 font-mono-tabular font-bold text-[#0B192C] text-sm">
-                      {checklist.waterMeterNo}
+                      {checklist.waterMeterNo.trim() || 'Girilmedi'}
                     </dd>
-                    <span className="mt-0.5 block text-[11px] text-emerald-700">
-                      {checklist.waterMeterPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf eksik'}
+                    <span className={`mt-0.5 block text-[11px] ${checklist.waterMeterPhoto ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      {checklist.waterMeterPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf eklenmedi'}
                     </span>
                   </div>
                   <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3">
                     <dt className="text-slate-500">Doğalgaz Sayacı</dt>
                     <dd className="mt-1 font-mono-tabular font-bold text-[#0B192C] text-sm">
-                      {checklist.gasMeterNo}
+                      {checklist.gasMeterNo.trim() || 'Girilmedi'}
                     </dd>
-                    <span className="mt-0.5 block text-[11px] text-emerald-700">
-                      {checklist.gasMeterPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf eksik'}
+                    <span className={`mt-0.5 block text-[11px] ${checklist.gasMeterPhoto ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      {checklist.gasMeterPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf eklenmedi'}
                     </span>
                   </div>
                   <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3">
@@ -1302,7 +1305,7 @@ export function HandoverScreen({
                       {checklist.keysCount} Adet
                     </dd>
                     <span className="mt-0.5 block text-[11px] text-slate-500">
-                      {meterPhotosCount}/3 sayaç fotoğrafı
+                      Opsiyonel
                     </span>
                   </div>
                 </dl>
