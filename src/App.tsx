@@ -31,6 +31,7 @@ import {
   roleFromLoginChoice,
   writeActiveRole,
   registerAccount,
+  saveOwnPhone,
   signInAccount,
   signOutAccount,
   TENANT_GUIDE_STORAGE_PREFIX,
@@ -39,6 +40,7 @@ import {
   type TenantHistory,
 } from './lib/account';
 import { handoverSubmitError } from './lib/handoverSteps';
+import { parseTurkishMobile } from './lib/phone';
 import { setRentalPaymentStatus, submitRentPayment } from './lib/payments';
 import { supabase } from './lib/supabase';
 import {
@@ -135,7 +137,7 @@ export default function App() {
   const tenantInviteStatus = activeTenantRentalId ? 'active' : 'pending';
   const [tenantMatchDismissed, setTenantMatchDismissed] = useState(false);
   const [transparentEntryPledged, setTransparentEntryPledged] = useState(false);
-  const [pledgePromptCode, setPledgePromptCode] = useState<string | null>(null);
+  const [pledgePrompt, setPledgePrompt] = useState<{ code: string; phone: string } | null>(null);
   const [pledgeSaving, setPledgeSaving] = useState(false);
   const [tenantHistory, setTenantHistory] = useState<TenantHistory | null>(null);
   const [tenantHistoryRefreshFailed, setTenantHistoryRefreshFailed] = useState(false);
@@ -230,6 +232,11 @@ export default function App() {
       return null;
     });
     if (!workspace || activeUserRef.current !== userId) return;
+    setSession((current) =>
+      current.userId === userId
+        ? { ...current, phone: workspace.session.phone || current.phone }
+        : current
+    );
     setOwnedProperties(workspace.ownedProperties);
     setCandidates(workspace.candidates);
     setPendingMatch(workspace.pendingMatch);
@@ -261,6 +268,8 @@ export default function App() {
           receipts: next.receipts,
           tenantSubmitted: receivedSubmission ? true : current.tenantSubmitted,
           landlordUserId: next.landlordUserId,
+          landlordPhone: next.landlordPhone ?? null,
+          tenantPhone: next.tenantPhone ?? null,
           checklist: landlordApproved
             ? { ...handover.checklist, landlordStatus: 'approved' }
             : handover.checklist,
@@ -540,9 +549,15 @@ export default function App() {
     }
   };
 
-  const handleSendKmkInvite = async (propertyId: string, carnetCode: string) => {
+  const handleSendKmkInvite = async (propertyId: string, carnetCode: string, phone?: string) => {
     if (!session.userId) {
       throw new Error('Davet kodu oluşturmak için giriş yapın.');
+    }
+    if (phone) {
+      const saved = await saveOwnPhone(session.userId, phone);
+      setSession((current) => ({ ...current, phone: saved }));
+    } else if (!parseTurkishMobile(session.phone).ok) {
+      throw new Error('Davet göndermeden önce cep telefonunuzu kaydedin.');
     }
     let inviteCode = '';
     try {
@@ -574,10 +589,15 @@ export default function App() {
     return inviteCode;
   };
 
-  const completeInviteCode = (rawCode: string) => {
+  const completeInviteCode = (rawCode: string, phone: string) => {
     if (!session.userId) return;
-    void acceptRentalByInviteCode(session.userId, rawCode)
-      .then(() => applyWorkspace(session.userId, false))
+    const userId = session.userId;
+    void saveOwnPhone(userId, phone)
+      .then((saved) => {
+        setSession((current) => ({ ...current, phone: saved }));
+        return acceptRentalByInviteCode(userId, rawCode);
+      })
+      .then(() => applyWorkspace(userId, false))
       .then(() => {
         setActiveScreen('handover');
         showToast('Davet Onaylandı! Şimdi daire teslim tutanağını oluşturabilirsiniz.');
@@ -588,25 +608,30 @@ export default function App() {
       });
   };
 
-  const handleSubmitInviteCode = (rawCode: string) => {
+  const handleSubmitInviteCode = (rawCode: string, phone: string) => {
     if (!session.userId) return;
+    const parsedPhone = parseTurkishMobile(phone);
+    if (!parsedPhone.ok) {
+      showToast(parsedPhone.message);
+      return;
+    }
     const noHistory =
       tenantHistory?.approvedPaymentCount === 0 && tenantHistory.references.length === 0;
     if (noHistory) {
-      setPledgePromptCode(rawCode.trim());
+      setPledgePrompt({ code: rawCode.trim(), phone: parsedPhone.value.national });
       return;
     }
-    completeInviteCode(rawCode);
+    completeInviteCode(rawCode, parsedPhone.value.national);
   };
 
   const continueInviteAfterPledge = async (acceptPledge: boolean) => {
-    if (!pledgePromptCode || pledgeSaving) return;
+    if (!pledgePrompt || pledgeSaving) return;
     setPledgeSaving(true);
     try {
       if (acceptPledge) await handleSetTransparentPledge(true);
-      const code = pledgePromptCode;
-      setPledgePromptCode(null);
-      completeInviteCode(code);
+      const { code, phone } = pledgePrompt;
+      setPledgePrompt(null);
+      completeInviteCode(code, phone);
     } catch {
       return;
     } finally {
@@ -1068,6 +1093,7 @@ export default function App() {
     email: string;
     password: string;
     role: UserRole;
+    phone: string;
   }) => {
     try {
       const result = await registerAccount(input);
@@ -1108,6 +1134,7 @@ export default function App() {
 
       {session.role === 'tenant' && activeScreen !== 'login' && session.authenticated && (
         <TenantInviteDock
+          profilePhone={session.phone}
           onSubmitCode={handleSubmitInviteCode}
           hideCodeForm={tenantInviteStatus === 'active' || activeScreen === 'trust-card'}
         />
@@ -1278,6 +1305,7 @@ export default function App() {
                 focusedCandidateCode={focusedCandidateCode}
                 onClearFocusedCandidate={() => setFocusedCandidateCode(null)}
                 lookupCandidates={candidates}
+                landlordPhone={session.phone}
                 onSendRentalInvite={handleSendKmkInvite}
                 onCreateProperty={handleCreatePropertyForInvite}
                 onOpenHandover={(propertyId) => {
@@ -1329,7 +1357,7 @@ export default function App() {
       )}
 
       {/* Live Feedback Toast */}
-      {pledgePromptCode && (
+      {pledgePrompt && (
         <div
           className="fixed inset-0 z-50 bg-[#0B192C]/75 flex items-center justify-center p-4"
           role="dialog"

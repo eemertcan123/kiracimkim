@@ -17,10 +17,25 @@ import {
   Trash2,
   FileSignature,
 } from 'lucide-react';
+import { ContactActions } from '../../components/PhoneContact';
 import { ResilientImage } from '../../components/ResilientImage';
 import { WriteTenantReferenceModal } from '../../components/WriteTenantReferenceModal';
 import { roomsWithoutPhotos } from '../../lib/handoverSteps';
+import { parseTurkishMobile } from '../../lib/phone';
 import { HandoverPhoto, LandlordProperty, LandlordReference } from '../../types/kiracimkim';
+
+function TenantMatchContact({ phone }: { phone?: string | null }) {
+  if (!phone || !parseTurkishMobile(phone).ok) {
+    return (
+      <p className="mt-1 text-xs text-slate-500 sm:text-sm">Kiracı telefonu henüz kayıtlı değil.</p>
+    );
+  }
+  return (
+    <div className="mt-2">
+      <ContactActions phone={phone} />
+    </div>
+  );
+}
 
 const OBJECTION_TEMPLATES = [
   'Sayaç endeks fotoğrafları eksik veya okunmuyor',
@@ -277,6 +292,7 @@ export function LandlordHandoverScreen({
                           {statusText}
                         </p>
                       )}
+                      {hasTenant && <TenantMatchContact phone={prop.tenantPhone} />}
                     </div>
                   </div>
 
@@ -357,6 +373,7 @@ export function LandlordHandoverScreen({
                       <span className="text-slate-400 font-normal">•</span>{' '}
                       <span className="font-semibold text-slate-700">Kiracı: {prop.tenantName}</span>
                     </h2>
+                    <TenantMatchContact phone={prop.tenantPhone} />
                   </div>
                   <div className="shrink-0 flex flex-wrap items-center gap-2">
                     <button
@@ -532,6 +549,17 @@ export function LandlordHandoverScreen({
                   : activeProperty.tenantName && activeProperty.tenantTransparencyPledged === false
                     ? ' • Taahhüt Onaylanmadan Devam Edildi'
                     : ''}
+                {activeProperty.tenantName && (
+                  <div className="mt-2">
+                    {activeProperty.tenantPhone && parseTurkishMobile(activeProperty.tenantPhone).ok ? (
+                      <ContactActions phone={activeProperty.tenantPhone} tone="dark" />
+                    ) : (
+                      <span className="text-xs font-medium text-slate-300">
+                        Kiracı telefonu henüz kayıtlı değil.
+                      </span>
+                    )}
+                  </div>
+                )}
               </dd>
             </div>
             <div>
