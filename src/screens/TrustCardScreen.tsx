@@ -248,28 +248,43 @@ export function TrustCardScreen({
 
   const shareControls = (primary: boolean) => (
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-      <div>
-        <p className="mb-1 text-xs font-semibold">Paylaşım kodunuz</p>
-        <span className="inline-flex min-h-[44px] max-w-full select-all items-center gap-2 break-all rounded-xl border border-emerald-200 bg-emerald-50 px-3 font-mono-tabular font-bold text-emerald-800">
+      <div className="w-full sm:w-auto">
+        <p className="mb-1 text-xs font-semibold">Ev sahibiyle paylaşılacak kod</p>
+        <span className="flex min-h-[44px] w-full select-all items-center justify-center gap-2 break-all rounded-xl border border-emerald-200 bg-emerald-50 px-3 font-mono-tabular font-bold text-emerald-800 sm:inline-flex sm:w-auto sm:justify-start">
           {primary && activeShareCode && (
             <span className="size-2 shrink-0 animate-pulse rounded-full bg-emerald-500" aria-hidden="true" />
           )}
           {activeShareCode || 'Kod henüz hazır değil'}
         </span>
       </div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+      <div className="flex w-full gap-2 sm:w-auto">
         {primary && (
-          <button type="button" disabled={!activeShareCode} onClick={shareOnWhatsApp} className={primaryButton}>
+          <button
+            type="button"
+            disabled={!activeShareCode}
+            onClick={shareOnWhatsApp}
+            className={`${primaryButton} w-auto! min-w-0 flex-1 whitespace-nowrap sm:flex-none`}
+          >
             <Share2 className="h-4 w-4 shrink-0" aria-hidden="true" />
             WhatsApp ile paylaş
           </button>
         )}
-        <button type="button" disabled={!activeShareCode} onClick={() => void copyShareCode()} className={secondaryButton}>
+        <button
+          type="button"
+          disabled={!activeShareCode}
+          onClick={() => void copyShareCode()}
+          className={`${secondaryButton} w-auto! shrink-0 whitespace-nowrap`}
+        >
           <Copy className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span aria-live="polite">{copied ? 'Kopyalandı' : 'Kodu kopyala'}</span>
+          <span aria-live="polite">{copied ? 'Kopyalandı' : 'Kopyala'}</span>
         </button>
         {!primary && (
-          <button type="button" disabled={!activeShareCode} onClick={shareOnWhatsApp} className={secondaryButton}>
+          <button
+            type="button"
+            disabled={!activeShareCode}
+            onClick={shareOnWhatsApp}
+            className={`${secondaryButton} w-auto! min-w-0 flex-1 whitespace-nowrap sm:flex-none`}
+          >
             <Share2 className="h-4 w-4 shrink-0" aria-hidden="true" />
             WhatsApp ile paylaş
           </button>
@@ -280,7 +295,7 @@ export function TrustCardScreen({
 
   return (
     <section className="mx-auto max-w-5xl space-y-4 px-4 py-5 sm:px-6 sm:py-8">
-      <section aria-labelledby="tenant-next-action" className="relative rounded-3xl bg-[#0B192C] p-4 pr-14 text-white shadow-sm sm:px-6 sm:py-5">
+      <section aria-labelledby="tenant-next-action" className="relative rounded-3xl bg-[#0B192C] p-4 text-white shadow-sm sm:px-6 sm:py-5">
         {!hasActiveRental && (
           <button
             type="button"
@@ -294,7 +309,7 @@ export function TrustCardScreen({
           </button>
         )}
         <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="flex min-w-0 items-start gap-3">
+          <div className={`flex min-w-0 items-start gap-3 ${hasActiveRental ? '' : 'pr-10 sm:pr-0'}`}>
             <span className="shrink-0 rounded-xl bg-emerald-400/15 p-2 text-emerald-300">
               <ActionIcon className="size-5" aria-hidden="true" />
             </span>
