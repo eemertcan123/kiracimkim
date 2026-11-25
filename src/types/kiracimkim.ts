@@ -142,6 +142,8 @@ export interface LandlordProperty {
   fullAddress: string;
   tenantName: string | null;
   tenantMaskedName: string | null;
+  tenantPhone?: string | null;
+  landlordPhone?: string | null;
   pendingInvite?: PendingTenantInvite | null;
   iban: string;
   contractStartDate: string;

@@ -11,6 +11,7 @@ import {
   Share2,
   Clock,
 } from 'lucide-react';
+import { PhoneField } from '../../components/PhoneContact';
 import {
   findProfileByShareCode,
   fetchProfile,
@@ -20,6 +21,7 @@ import {
   readPledge,
   type LandlordTenantRental,
 } from '../../lib/account';
+import { parseTurkishMobile } from '../../lib/phone';
 import { supabase } from '../../lib/supabase';
 import { CandidateProfile, LandlordProperty } from '../../types/kiracimkim';
 
@@ -87,7 +89,8 @@ interface LandlordCandidateScreenProps {
   focusedCandidateCode: string | null;
   onClearFocusedCandidate: () => void;
   lookupCandidates?: CandidateProfile[];
-  onSendRentalInvite: (propertyId: string, carnetCode: string) => Promise<string>;
+  landlordPhone: string;
+  onSendRentalInvite: (propertyId: string, carnetCode: string, phone?: string) => Promise<string>;
   onCreateProperty: (title: string, district: string) => Promise<string>;
   onOpenHandover: (propertyId: string) => void;
   onNotify: (message: string) => void;
@@ -99,6 +102,7 @@ export function LandlordCandidateScreen({
   selectedPropertyId,
   focusedCandidateCode,
   onClearFocusedCandidate,
+  landlordPhone,
   onSendRentalInvite,
   onCreateProperty,
   onOpenHandover,
@@ -134,6 +138,7 @@ export function LandlordCandidateScreen({
   const [tenantRental, setTenantRental] = useState<LandlordTenantRental | null>(null);
   const [tenantRentalReady, setTenantRentalReady] = useState(false);
   const [inviteCodeCopied, setInviteCodeCopied] = useState(false);
+  const [landlordPhoneDraft, setLandlordPhoneDraft] = useState('');
   const useNewProperty = !hasOwnedProperties || inviteMode === 'new';
   const inviteProperty = ownedProperties.find((property) => property.id === invitePropertyId);
   const canInviteToSelectedProperty = inviteProperty && !propertyInviteRestriction(inviteProperty);
@@ -361,8 +366,11 @@ export function LandlordCandidateScreen({
     setNewPropertyTitle('');
     setNewPropertyDistrict('');
     setCandidateInviteError('');
+    setLandlordPhoneDraft('');
     setInviteCandidateModalOpen(true);
   };
+
+  const landlordNeedsPhone = !parseTurkishMobile(landlordPhone).ok;
 
   const handleSubmitCandidateInvite = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -378,13 +386,22 @@ export function LandlordCandidateScreen({
       setCandidateInviteError('Davet için uygun bir mülk seçin.');
       return;
     }
+    const parsedPhone = landlordNeedsPhone ? parseTurkishMobile(landlordPhoneDraft) : null;
+    if (parsedPhone && !parsedPhone.ok) {
+      setCandidateInviteError(parsedPhone.message);
+      return;
+    }
 
     const request = lookupRequest.current;
     setInviteSending(true);
     setCandidateInviteError('');
     try {
       const propertyId = useNewProperty ? await onCreateProperty(title, district) : invitePropertyId;
-      const inviteCode = await onSendRentalInvite(propertyId, selectedCandidate.code);
+      const inviteCode = await onSendRentalInvite(
+        propertyId,
+        selectedCandidate.code,
+        parsedPhone?.ok ? parsedPhone.value.national : undefined
+      );
       if (request !== lookupRequest.current) return;
       setInviteCodeCopied(false);
       setTenantRental({
@@ -876,6 +893,18 @@ export function LandlordCandidateScreen({
                       />
                     </div>
                   </div>
+                )}
+                {landlordNeedsPhone && (
+                  <PhoneField
+                    id="landlord-invite-phone"
+                    value={landlordPhoneDraft}
+                    onChange={(value) => {
+                      setLandlordPhoneDraft(value);
+                      setCandidateInviteError('');
+                    }}
+                    label="Cep telefonunuz"
+                    hint="Profilinizde numara yok. Davet kodu oluşturulurken kaydedilir ve kiracı daveti kabul edince görünür."
+                  />
                 )}
               </fieldset>
 

@@ -16,6 +16,7 @@ import {
 } from './payments';
 import type { RentReceipt } from '../types/kiracimkim';
 import { handoverSubmitError } from './handoverSteps';
+import { parseTurkishMobile } from './phone';
 import { supabase } from './supabase';
 
 const PROFILE_COLUMNS = new Set([
@@ -412,14 +413,18 @@ export function roleFromLoginChoice(profileRole: UserRole, selectedRole: UserRol
   return 'tenant';
 }
 
-export function toSession(profile: ProfileRow, email?: string | null): UserSession {
+export function toSession(
+  profile: ProfileRow,
+  email?: string | null,
+  phone = ''
+): UserSession {
   const fullName = profile.full_name?.trim() || email || 'Kullanıcı';
   return {
     authenticated: true,
     userId: profile.id,
     fullName,
     maskedName: maskPersonName(fullName),
-    phone: '',
+    phone,
     role: normalizeRole(profile.role),
     verifiedViaEDevlet: false,
     activeTenantPropertyId: '',
@@ -428,24 +433,160 @@ export function toSession(profile: ProfileRow, email?: string | null): UserSessi
 }
 
 const SHARE_CODE_COLUMNS = ['share_code', 'karne_code', 'carnet_code'] as const;
+const OPTIONAL_PROFILE_COLUMNS = [
+  'full_name',
+  'role',
+  'carnet_code',
+  'share_code',
+  'karne_code',
+  'created_at',
+  'transparency_pledge_accepted',
+] as const;
 
-let shareCodeColumns: string[] | null = null;
+let readableProfileColumns: string[] | null = null;
 
-async function profileCodeColumns() {
-  if (shareCodeColumns) return shareCodeColumns;
-  const found: string[] = [];
-  for (const column of SHARE_CODE_COLUMNS) {
+function isMissingPhoneColumn(error: { message?: string; code?: string } | null) {
+  if (!error) return false;
+  const message = error.message ?? '';
+  return (
+    error.code === '42703' ||
+    error.code === 'PGRST204' ||
+    (/phone/i.test(message) && /does not exist|schema cache|could not find|42703/i.test(message))
+  );
+}
+
+function isMissingContactRpc(error: { message?: string; code?: string } | null) {
+  if (!error) return false;
+  const message = error.message ?? '';
+  return (
+    error.code === 'PGRST202' ||
+    error.code === '42883' ||
+    (/profile_contact_phones/i.test(message) &&
+      /could not find|does not exist|schema cache|42883/i.test(message))
+  );
+}
+
+async function readableProfileSelect() {
+  if (readableProfileColumns) return readableProfileColumns;
+  const found = ['id'];
+  for (const column of OPTIONAL_PROFILE_COLUMNS) {
     const { error } = await supabase.from('profiles').select(column).limit(0);
     if (!error) found.push(column);
   }
+  readableProfileColumns = found;
+  return found;
+}
+
+async function profileColumns() {
+  // The cast only satisfies the Supabase client. Runtime selection never includes phone.
+  return (await readableProfileSelect()).join(',') as '*';
+}
+
+async function profileCodeColumns() {
+  const columns = await readableProfileSelect();
+  const found = SHARE_CODE_COLUMNS.filter((column) => columns.includes(column));
   if (found.length === 0) {
     const message =
       'Paylaşım kodu kaydedilemedi: profiles tablosunda share_code, karne_code veya carnet_code sütunu yok.';
     console.error(message);
     throw new Error(message);
   }
-  shareCodeColumns = found;
   return found;
+}
+
+async function readMetadataPhone() {
+  const { data } = await supabase.auth.getUser();
+  const metadata = (data.user?.user_metadata ?? {}) as { phone?: unknown };
+  if (typeof metadata.phone !== 'string') return '';
+  const parsed = parseTurkishMobile(metadata.phone);
+  return parsed.ok ? parsed.value.national : '';
+}
+
+async function readOwnPhoneColumn(userId: string) {
+  const { data, error } = await supabase.from('profiles').select('phone').eq('id', userId).maybeSingle();
+  if (error) {
+    if (!isMissingPhoneColumn(error) && !/permission denied|42501/i.test(error.message ?? '')) {
+      console.error('Profil telefonu okunamadı:', error);
+    }
+    return '';
+  }
+  if (!data) return '';
+  const raw = (data as { phone?: string | null }).phone ?? '';
+  const parsed = parseTurkishMobile(raw);
+  return parsed.ok ? parsed.value.national : '';
+}
+
+async function writeProfilePhone(userId: string, national: string) {
+  const { error } = await supabase.from('profiles').update({ phone: national }).eq('id', userId);
+  if (!error) return { status: 'saved' as const };
+  if (isMissingPhoneColumn(error)) return { status: 'missing' as const };
+  return { status: 'error' as const, message: error.message };
+}
+
+async function profilePhoneIsBlank(userId: string) {
+  const rpc = await supabase.rpc('profile_contact_phones', { target_ids: [userId] });
+  if (!rpc.error) {
+    const rows = (rpc.data ?? []) as { id?: string; phone?: string | null }[];
+    const own = rows.find((row) => row.id === userId);
+    return !own?.phone;
+  }
+  if (!isMissingContactRpc(rpc.error)) return null;
+  const { data, error } = await supabase.from('profiles').select('phone').eq('id', userId).maybeSingle();
+  if (error) return isMissingPhoneColumn(error) ? null : null;
+  return !((data as { phone?: string | null } | null)?.phone ?? '').trim();
+}
+
+async function copyMetadataPhoneToProfile(userId: string) {
+  const metadataPhone = await readMetadataPhone();
+  if (!metadataPhone) return;
+  const blank = await profilePhoneIsBlank(userId);
+  if (blank !== true) return;
+  const written = await writeProfilePhone(userId, metadataPhone);
+  if (written.status === 'error') {
+    console.error('Telefon profiline yazılamadı:', written.message);
+  }
+}
+
+export async function saveOwnPhone(userId: string, rawPhone: string) {
+  const parsed = parseTurkishMobile(rawPhone);
+  if (!parsed.ok) throw new Error(parsed.message);
+  const national = parsed.value.national;
+  const metadata = await supabase.auth.updateUser({ data: { phone: national } });
+  const written = await writeProfilePhone(userId, national);
+  if (written.status === 'saved') return national;
+  if (written.status === 'missing' && !metadata.error) return national;
+  if (written.status === 'error') {
+    if (/row-level security/i.test(written.message)) {
+      throw new Error('Telefon profilinize kaydedilemedi. Kendi profil satırınızı güncelleme izni gerekli.');
+    }
+    throw new Error(written.message || 'Telefon numarası profilinize kaydedilemedi.');
+  }
+  throw new Error(
+    'Telefon numarası kaydedilemedi. Supabase SQL editöründe profiles telefon migration dosyasını çalıştırın.'
+  );
+}
+
+export async function loadVisiblePhones(ids: string[], selfId: string) {
+  const phones = new Map<string, string>();
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length > 0) {
+    const { data, error } = await supabase.rpc('profile_contact_phones', { target_ids: unique });
+    if (!error) {
+      for (const row of (data ?? []) as { id?: string; phone?: string | null }[]) {
+        if (!row.id || !row.phone) continue;
+        const parsed = parseTurkishMobile(row.phone);
+        if (parsed.ok) phones.set(row.id, parsed.value.national);
+      }
+    } else if (!isMissingContactRpc(error)) {
+      console.error('İletişim telefonları okunamadı:', error);
+    }
+  }
+  if (selfId && !phones.get(selfId)) {
+    const metadataPhone = await readMetadataPhone();
+    const ownPhone = metadataPhone || (await readOwnPhoneColumn(selfId));
+    if (ownPhone) phones.set(selfId, ownPhone);
+  }
+  return phones;
 }
 
 export function readProfileCode(row: ProfileRow | null | undefined) {
@@ -538,13 +679,13 @@ async function codeTaken(code: string) {
 }
 
 export async function saveProfileShareCode(userId: string, code: string) {
-  const columns = await profileCodeColumns();
-  const payload = Object.fromEntries(columns.map((column) => [column, code]));
+  const codeColumns = await profileCodeColumns();
+  const payload = Object.fromEntries(codeColumns.map((column) => [column, code]));
   const { data, error } = await supabase
     .from('profiles')
     .update(payload)
     .eq('id', userId)
-    .select('*')
+    .select(await profileColumns())
     .maybeSingle();
   if (error) {
     console.error('Paylaşım kodu profiles tablosuna kaydedilemedi:', error);
@@ -562,9 +703,10 @@ export async function saveProfileShareCode(userId: string, code: string) {
 export async function findProfileByShareCode(rawCode: string) {
   const code = rawCode.trim();
   if (!code) return null;
-  const columns = await profileCodeColumns();
-  for (const column of columns) {
-    const { data, error } = await supabase.from('profiles').select('*').ilike(column, code).limit(1);
+  const codeColumns = await profileCodeColumns();
+  const fields = await profileColumns();
+  for (const column of codeColumns) {
+    const { data, error } = await supabase.from('profiles').select(fields).ilike(column, code).limit(1);
     if (error) {
       console.error('Paylaşım kodu sorgusu başarısız:', error);
       throw new Error(error.message);
@@ -612,7 +754,10 @@ export async function registerAccount(input: {
   email: string;
   password: string;
   role: UserRole;
+  phone: string;
 }) {
+  const parsedPhone = parseTurkishMobile(input.phone);
+  if (!parsedPhone.ok) throw new Error(parsedPhone.message);
   const { data, error } = await supabase.auth.signUp({
     email: input.email.trim(),
     password: input.password,
@@ -620,6 +765,7 @@ export async function registerAccount(input: {
       data: {
         full_name: input.fullName.trim(),
         role: input.role,
+        phone: parsedPhone.value.national,
       },
     },
   });
@@ -632,12 +778,18 @@ export async function registerAccount(input: {
     id: user.id,
     full_name: input.fullName.trim(),
     role: input.role,
+    phone: parsedPhone.value.national,
   };
   if (carnetCode) {
     for (const column of await profileCodeColumns()) payload[column] = carnetCode;
   }
 
-  const inserted = await supabase.from('profiles').insert(payload).select('*').maybeSingle();
+  const fields = await profileColumns();
+  let inserted = await supabase.from('profiles').insert(payload).select(fields).maybeSingle();
+  if (inserted.error && isMissingPhoneColumn(inserted.error)) {
+    const { phone: _phone, ...withoutPhone } = payload;
+    inserted = await supabase.from('profiles').insert(withoutPhone).select(fields).maybeSingle();
+  }
   if (inserted.error) {
     console.error('Kayıt profili profiles tablosuna yazılamadı:', inserted.error);
     throw inserted.error;
@@ -676,7 +828,7 @@ export async function signInAccount(email: string, password: string) {
 export async function fetchProfile(userId: string) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(await profileColumns())
     .eq('id', userId)
     .maybeSingle();
   if (error) throw error;
@@ -689,6 +841,7 @@ export async function fetchProfile(userId: string) {
 export async function ensureProfile(userId: string, email?: string | null) {
   const existing = await fetchProfile(userId);
   if (existing) {
+    await copyMetadataPhoneToProfile(userId);
     if (!readProfileCode(existing)) {
       await ensureProfileShareCode(userId);
       return (await fetchProfile(userId)) ?? existing;
@@ -699,18 +852,25 @@ export async function ensureProfile(userId: string, email?: string | null) {
   const { data: userData } = await supabase.auth.getUser();
   const authUser = userData.user;
   const resolvedEmail = (email ?? authUser?.email ?? '').trim();
-  const metadata = (authUser?.user_metadata ?? {}) as { full_name?: string; role?: string };
+  const metadata = (authUser?.user_metadata ?? {}) as { full_name?: string; role?: string; phone?: string };
   const fullName = metadata.full_name?.trim() || resolvedEmail || 'Kullanıcı';
   const role = metadata.role === 'landlord' ? 'landlord' : 'tenant';
+  const metadataPhone = parseTurkishMobile(metadata.phone ?? '');
   const carnetCode = await uniqueKarneCode();
   const payload: Record<string, unknown> = {
     id: userId,
     full_name: fullName,
     role,
   };
+  if (metadataPhone.ok) payload.phone = metadataPhone.value.national;
   for (const column of await profileCodeColumns()) payload[column] = carnetCode;
 
-  const inserted = await supabase.from('profiles').insert(payload).select('*').maybeSingle();
+  const fields = await profileColumns();
+  let inserted = await supabase.from('profiles').insert(payload).select(fields).maybeSingle();
+  if (inserted.error && payload.phone && isMissingPhoneColumn(inserted.error)) {
+    const { phone: _phone, ...withoutPhone } = payload;
+    inserted = await supabase.from('profiles').insert(withoutPhone).select(fields).maybeSingle();
+  }
 
   if (inserted.error) {
     const raced = await fetchProfile(userId);
@@ -806,12 +966,19 @@ export async function loadWorkspace(userId: string) {
     if (entry.tenant_id) profileIds.add(entry.tenant_id);
     if (entry.landlord_id) profileIds.add(entry.landlord_id);
   }
-  const profileResult = await supabase.from('profiles').select('*').in('id', [...profileIds]);
+  const profileResult = await supabase.from('profiles').select(await profileColumns()).in('id', [...profileIds]);
   if (profileResult.error) throw profileResult.error;
 
   const profiles = (profileResult.data ?? []) as ProfileRow[];
   profiles.forEach((item) => rememberPledgeColumn(item));
   const profileById = new Map(profiles.map((item) => [item.id, item]));
+  const visiblePhoneIds = new Set<string>([userId]);
+  for (const entry of rentals) {
+    if (rentalPhase(entry.status) !== 'active') continue;
+    if (entry.landlord_id === userId && entry.tenant_id) visiblePhoneIds.add(entry.tenant_id);
+    if (entry.tenant_id === userId && entry.landlord_id) visiblePhoneIds.add(entry.landlord_id);
+  }
+  const phones = await loadVisiblePhones([...visiblePhoneIds], userId);
   const rentPayments = await loadRentPayments(userId);
   const properties = [...ownedRows, ...rentedRows];
   const propertyById = new Map(properties.map((item) => [item.id, item]));
@@ -846,6 +1013,7 @@ export async function loadWorkspace(userId: string) {
       }
       property.tenantName = tenantName;
       property.tenantMaskedName = maskPersonName(tenantName);
+      property.tenantPhone = rental.tenant_id ? phones.get(rental.tenant_id) ?? null : null;
       property.tenantTransparencyPledged = readPledge(tenant);
       property.receipts = property.receipts.map((receipt) => ({
         ...receipt,
@@ -880,6 +1048,9 @@ export async function loadWorkspace(userId: string) {
       }));
       property.rentalId = entry.id;
       property.landlordUserId = entry.landlord_id;
+      if (rentalPhase(entry.status) === 'active' && entry.landlord_id) {
+        property.landlordPhone = phones.get(entry.landlord_id) ?? null;
+      }
       withHandoverApproval(property, entry);
       const landlord = entry.landlord_id ? profileById.get(entry.landlord_id) : undefined;
       const landlordName = landlord?.full_name?.trim() || 'Ev Sahibi';
@@ -965,7 +1136,7 @@ export async function loadWorkspace(userId: string) {
     ],
   };
 
-  const session = toSession(profile);
+  const session = toSession(profile, undefined, phones.get(userId) ?? '');
   const focusRental = activeRental ?? pendingRental ?? null;
   session.activeTenantPropertyId = focusRental?.property_id ?? tenantProperties[0]?.id ?? '';
 

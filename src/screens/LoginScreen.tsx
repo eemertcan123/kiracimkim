@@ -9,7 +9,9 @@ import {
   KeyRound,
   User,
 } from 'lucide-react';
+import { PhoneField } from '../components/PhoneContact';
 import { ResilientImage } from '../components/ResilientImage';
+import { parseTurkishMobile } from '../lib/phone';
 import { UserRole, UserSession } from '../types/kiracimkim';
 
 interface LoginScreenProps {
@@ -20,6 +22,7 @@ interface LoginScreenProps {
     email: string;
     password: string;
     role: UserRole;
+    phone: string;
   }) => Promise<void>;
   onContinue: () => void;
 }
@@ -33,6 +36,7 @@ export function LoginScreen({
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [role, setRole] = useState<UserRole>('tenant');
   const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -42,6 +46,11 @@ export function LoginScreen({
     event.preventDefault();
     if (mode === 'register' && fullName.trim().length < 3) {
       setErrorMsg('Lütfen ad soyad bilginizi girin.');
+      return;
+    }
+    const parsedPhone = mode === 'register' ? parseTurkishMobile(phone) : null;
+    if (parsedPhone && !parsedPhone.ok) {
+      setErrorMsg(parsedPhone.message);
       return;
     }
     if (!email.includes('@') || !email.includes('.')) {
@@ -58,7 +67,8 @@ export function LoginScreen({
       if (mode === 'login') {
         await onLogin(email, password, role);
       } else {
-        await onRegister({ fullName, email, password, role });
+        if (!parsedPhone?.ok) return;
+        await onRegister({ fullName, email, password, role, phone: parsedPhone.value.national });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'İşlem tamamlanamadı.';
@@ -136,7 +146,7 @@ export function LoginScreen({
                 <p className="mt-1 text-sm text-slate-500">
                   {mode === 'login'
                     ? 'E-posta ve şifrenizle hesabınıza girin.'
-                    : 'Ad soyad, e-posta ve şifre ile hesabınızı oluşturun.'}
+                    : 'Ad soyad, cep telefonu, e-posta ve şifre ile hesabınızı oluşturun.'}
                 </p>
               </div>
               {session.authenticated && (
@@ -225,29 +235,32 @@ export function LoginScreen({
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               {mode === 'register' && (
-                <div>
-                  <label
-                    htmlFor="register-name"
-                    className="block text-sm font-medium text-slate-700 mb-1.5"
-                  >
-                    Ad Soyad
-                  </label>
-                  <div className="relative">
-                    <User
-                      className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                      aria-hidden="true"
-                    />
-                    <input
-                      id="register-name"
-                      type="text"
-                      autoComplete="name"
-                      value={fullName}
-                      onChange={(event) => setFullName(event.target.value)}
-                      placeholder="Ad Soyad"
-                      className="w-full min-h-[48px] pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-[#0B192C] placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition-colors"
-                    />
+                <>
+                  <div>
+                    <label
+                      htmlFor="register-name"
+                      className="block text-sm font-medium text-slate-700 mb-1.5"
+                    >
+                      Ad Soyad
+                    </label>
+                    <div className="relative">
+                      <User
+                        className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                        aria-hidden="true"
+                      />
+                      <input
+                        id="register-name"
+                        type="text"
+                        autoComplete="name"
+                        value={fullName}
+                        onChange={(event) => setFullName(event.target.value)}
+                        placeholder="Ad Soyad"
+                        className="w-full min-h-[48px] pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-[#0B192C] placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition-colors"
+                      />
+                    </div>
                   </div>
-                </div>
+                  <PhoneField id="register-phone" value={phone} onChange={setPhone} />
+                </>
               )}
 
               <div>

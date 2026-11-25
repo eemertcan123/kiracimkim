@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowRight, Camera, CircleHelp, Clock, Copy, KeyRound, Landmark, RefreshCw, Share2, ShieldCheck } from 'lucide-react';
+import { ContactActions, PhoneField } from '../components/PhoneContact';
 import { ensureProfileShareCode, type PendingMatch, type TenantHistory } from '../lib/account';
+import { formatTurkishMobileDisplay, parseTurkishMobile } from '../lib/phone';
 import { supabase } from '../lib/supabase';
 import type { LandlordProperty, UserSession } from '../types/kiracimkim';
 
@@ -11,7 +13,7 @@ interface TrustCardScreenProps {
   pendingMatch: PendingMatch | null;
   history: TenantHistory | null;
   historyRefreshFailed: boolean;
-  onSubmitInviteCode: (code: string) => void;
+  onSubmitInviteCode: (code: string, phone: string) => void;
   onNavigate: (screen: 'handover' | 'receipts') => void;
   onNotify: (message: string) => void;
   onOpenGuide: () => void;
@@ -117,6 +119,10 @@ export function TrustCardScreen({
 }: TrustCardScreenProps) {
   const [copied, setCopied] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
+  const [contactPhone, setContactPhone] = useState(() =>
+    session.phone ? formatTurkishMobileDisplay(session.phone) : ''
+  );
+  const [phoneError, setPhoneError] = useState('');
   const [profileShareCode, setProfileShareCode] = useState(session.carnetCode);
   const [checkingInvites, setCheckingInvites] = useState(false);
 
@@ -126,6 +132,11 @@ export function TrustCardScreen({
   const hasHistory = history && (
     history.rentals.length > 0 || history.references.length > 0 || history.payments.length > 0
   );
+
+  useEffect(() => {
+    if (!session.phone) return;
+    setContactPhone((current) => (current.trim() ? current : formatTurkishMobileDisplay(session.phone)));
+  }, [session.phone]);
 
   useEffect(() => {
     if (!session.userId) return;
@@ -221,27 +232,49 @@ export function TrustCardScreen({
 
   const submitInvite = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (inviteCode.length === 6) onSubmitInviteCode(inviteCode);
+    const parsed = parseTurkishMobile(contactPhone);
+    if (!parsed.ok) {
+      setPhoneError(parsed.message);
+      return;
+    }
+    if (inviteCode.length === 6) onSubmitInviteCode(inviteCode, parsed.value.national);
   };
 
   const inviteForm = (primary: boolean) => (
-    <form onSubmit={submitInvite} className="max-w-lg space-y-2">
-      <label htmlFor="tenant-dashboard-invite" className="block text-sm font-semibold">
-        Ev sahibinizin verdiği 6 haneli davet kodu
-      </label>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          id="tenant-dashboard-invite"
-          type="text"
-          inputMode="numeric"
-          maxLength={6}
-          value={inviteCode}
-          onChange={(event) => setInviteCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-          className="min-h-[44px] w-full min-w-0 rounded-xl border border-slate-300 bg-white px-4 text-center text-base font-mono-tabular tracking-[0.25em] text-[#0B192C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 sm:w-32"
-        />
-        <button type="submit" disabled={inviteCode.length !== 6} className={primary ? primaryButton : secondaryButton}>
-          Daveti kabul et
-        </button>
+    <form onSubmit={submitInvite} className="max-w-lg space-y-3">
+      <PhoneField
+        id={primary ? 'tenant-dashboard-phone' : 'tenant-dashboard-phone-alt'}
+        value={contactPhone}
+        onChange={(value) => {
+          setContactPhone(value);
+          setPhoneError('');
+        }}
+        error={phoneError}
+        tone="onDark"
+        hint={
+          session.phone
+            ? 'Profilinizde kayıtlı numara. Daveti kabul ederken kaydedilir.'
+            : 'Kayıtlı numara yok. Daveti kabul etmek için cep telefonunuzu girin.'
+        }
+      />
+      <div>
+        <label htmlFor={primary ? 'tenant-dashboard-invite' : 'tenant-dashboard-invite-alt'} className="block text-sm font-semibold">
+          Ev sahibinizin verdiği 6 haneli davet kodu
+        </label>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <input
+            id={primary ? 'tenant-dashboard-invite' : 'tenant-dashboard-invite-alt'}
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={inviteCode}
+            onChange={(event) => setInviteCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+            className="min-h-[44px] w-full min-w-0 rounded-xl border border-slate-300 bg-white px-4 text-center text-base font-mono-tabular tracking-[0.25em] text-[#0B192C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 sm:w-32"
+          />
+          <button type="submit" disabled={inviteCode.length !== 6} className={primary ? primaryButton : secondaryButton}>
+            Daveti kabul et
+          </button>
+        </div>
       </div>
     </form>
   );
@@ -348,6 +381,24 @@ export function TrustCardScreen({
             </button>
           )}
         </div>
+
+        {hasActiveRental && activeRental && (
+          <div className="mt-4 border-t border-white/15 pt-4">
+            <p className="text-xs font-semibold tracking-wide text-emerald-200">Ev sahibi iletişimi</p>
+            <p className="mt-1 text-sm font-semibold text-white">
+              {activeRental.reference?.landlordName || 'Ev Sahibi'}
+            </p>
+            {activeRental.landlordPhone ? (
+              <div className="mt-2">
+                <ContactActions phone={activeRental.landlordPhone} tone="dark" />
+              </div>
+            ) : (
+              <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                Ev sahibinin telefonu henüz kayıtlı değil.
+              </p>
+            )}
+          </div>
+        )}
 
         {action.kind === 'share' && (
           <details className="mt-3 border-t border-white/20 pt-1 open:pb-2">
