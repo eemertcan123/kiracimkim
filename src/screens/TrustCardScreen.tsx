@@ -188,17 +188,17 @@ export function TrustCardScreen({
   );
   const scorecard = [
     {
-      label: 'Kira Ödemeleri',
-      value: approvedPayments > 0 ? `${approvedPayments} Onaylı Dekont` : '0 Onaylı Dekont',
-      detail: approvedPayments > 0 ? 'Ev sahibi onaylı ödemeler' : 'İlk kiralamanla birlikte burada birikir',
+      label: 'Kira Ödemeleriniz',
+      value: approvedPayments > 0 ? `${approvedPayments} Onaylı Dekont` : 'Henüz Kayıt Yok',
+      detail: approvedPayments > 0 ? 'Ev sahibi onaylı ödemeler' : 'İlk kiralamanız olduğu için henüz ödeme kaydı bulunmuyor.',
     },
     {
-      label: 'Teslim Tutanağı',
-      value: handoverStarted ? 'Oluşturuldu' : 'Henüz oluşturulmadı',
+      label: 'Teslim Tutanağınız',
+      value: handoverStarted ? 'Oluşturuldu' : 'Henüz Oluşturulmadı',
       detail: handoverStarted ? 'Ev sahibi incelemesine açık' : 'Ev sahibi daveti onaylandığında açılır',
     },
     {
-      label: 'Şeffaflık Taahhüdü',
+      label: 'Şeffaflık Taahhüdünüz',
       value: transparencyPledged ? 'Onaylandı' : 'Bekleniyor',
       detail: transparencyPledged ? 'Taahhüt kayıtlı' : 'Davet kabulünde onaylanır',
     },
@@ -377,10 +377,10 @@ export function TrustCardScreen({
 
         <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
           {scorecard.map((item) => (
-            <div key={item.label} className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-              <p className="text-[11px] font-semibold tracking-wide text-slate-500">{item.label}</p>
-              <p className="mt-1.5 text-sm font-bold leading-snug text-slate-700">{item.value}</p>
-              <p className="mt-1 text-xs leading-snug text-slate-500">{item.detail}</p>
+            <div key={item.label} className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-1.5 py-2.5 sm:p-3">
+              <p className="text-[10px] font-semibold leading-snug tracking-normal text-slate-500 sm:text-[11px] sm:tracking-wide">{item.label}</p>
+              <p className="mt-1.5 text-[11px] font-bold leading-tight text-slate-700 sm:text-sm sm:leading-snug">{item.value}</p>
+              <p className="mt-1 text-[10px] leading-snug text-slate-500 sm:text-xs">{item.detail}</p>
             </div>
           ))}
         </div>
